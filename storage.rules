@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function underSizeLimit(maxMB) {
+      return request.resource.size < maxMB * 1024 * 1024;
+    }
+
+    // Profile photos: only the owning user can write their own.
+    match /profile-photos/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid && underSizeLimit(10);
+    }
+
+    // Chat attachments: any signed-in user can write (chat-membership is
+    // enforced by Firestore rules on the message doc that references this
+    // file — Storage rules alone can't easily check chat participants without
+    // an extra read). Tighten with a Cloud Function validator before a real
+    // production launch if stricter enforcement is required.
+    match /chats/{chatId}/{fileName} {
+      allow read, write: if isSignedIn() && underSizeLimit(50);
+    }
+
+    match /groups/{groupId}/{fileName} {
+      allow read, write: if isSignedIn() && underSizeLimit(50);
+    }
+
+    // Spot media: only the author can upload to their own spots folder.
+    match /spots/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid && underSizeLimit(50);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

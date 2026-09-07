@@ -1,0 +1,228 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Brand */
+  --color-brand-900: #0b332f;
+  --color-brand-700: #12433d;
+  --color-brand-600: #17786f;
+  --color-brand-100: #e3f0ed;
+  --color-accent: #f2a93b;
+  --color-accent-dark: #d88f22;
+
+  /* Light theme surfaces */
+  --color-bg: #faf9f6;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f1efe9;
+  --color-border: #e4e0d6;
+  --color-text: #16211f;
+  --color-text-muted: #5c6b68;
+  --color-danger: #c4442e;
+  --color-success: #2f8f5b;
+
+  /* Type */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  --shadow-sm: 0 1px 2px rgba(11, 51, 47, 0.06);
+  --shadow-md: 0 8px 24px rgba(11, 51, 47, 0.1);
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --color-bg: #0e1210;
+  --color-surface: #161d1a;
+  --color-surface-alt: #1d2521;
+  --color-border: #29332e;
+  --color-text: #edf2f0;
+  --color-text-muted: #93a19c;
+  --color-brand-100: #12332e;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Focus visibility kept intentional and visible everywhere, incl. custom buttons */
+:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
+.rb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.rb-btn:active {
+  transform: scale(0.98);
+}
+
+.rb-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.rb-btn--primary {
+  background: var(--color-brand-700);
+  color: #fff;
+}
+
+.rb-btn--primary:hover:not(:disabled) {
+  background: var(--color-brand-900);
+}
+
+.rb-btn--outline {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.rb-btn--outline:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+}
+
+/* Square icon-only button — consistent hit target for header/toolbar icons */
+.rb-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rb-spin {
+  animation: rb-spin 1s linear infinite;
+}
+
+@keyframes rb-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.rb-skeleton {
+  background: linear-gradient(90deg, var(--color-surface-alt) 25%, var(--color-border) 37%, var(--color-surface-alt) 63%);
+  background-size: 400% 100%;
+  animation: rb-shimmer 1.4s ease infinite;
+}
+
+@keyframes rb-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.rb-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.rb-input:focus {
+  border-color: var(--color-brand-600);
+}
+
+.rb-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.rb-error-text {
+  color: var(--color-danger);
+  font-size: 13px;
+}
+
+/* The "thread" signature motif — a curved line joining two dots, used
+   wherever we mark a connection forming (splash, loading, empty states). */
+.rb-thread-loader {
+  width: 64px;
+  height: 32px;
+}
+
+.rb-thread-loader circle {
+  fill: var(--color-accent);
+}
+
+.rb-thread-loader path {
+  fill: none;
+  stroke: var(--color-brand-600);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: rb-thread-draw 1.4s ease-in-out infinite;
+}
+
+@keyframes rb-thread-draw {
+  0% {
+    stroke-dashoffset: 60;
+  }
+  50% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -60;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-thread-loader path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

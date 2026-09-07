@@ -1,0 +1,193 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // --- users/{uid} -----------------------------------------------------
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == uid && request.resource.data.uid == uid;
+      allow update: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.username == resource.data.username;
+      allow delete: if false;
+
+      match /callHistory/{entryId} {
+        allow read, create: if isSignedIn() && request.auth.uid == uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // --- usernames/{username} --------------------------------------------
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // --- chats/{chatId} — 1-1 chat, only the two participants ------------
+    match /chats/{chatId} {
+      allow read, update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn()
+                    && request.auth.uid in request.resource.data.participants
+                    && request.resource.data.participants.size() == 2;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn()
+                      && request.resource.data.senderId == request.auth.uid
+                      && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        // Sender can edit their own text/reactions/star fields (used for edit, soft-delete, reactions, starring).
+        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow delete: if false;
+      }
+
+      match /polls/{pollId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow delete: if false;
+      }
+    }
+
+    // --- groups/{groupId} — members only ----------------------------------
+    match /groups/{groupId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn()
+                    && request.auth.uid in request.resource.data.members
+                    && request.auth.uid in request.resource.data.admins;
+      allow update: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow delete: if isSignedIn() && request.auth.uid in resource.data.admins;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow create: if isSignedIn()
+                      && request.resource.data.senderId == request.auth.uid
+                      && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow delete: if false;
+      }
+
+      match /announcements/{announcementId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow create: if isSignedIn()
+                      && request.resource.data.postedBy == request.auth.uid
+                      && (request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.admins
+                          || request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.coAdmins);
+        allow update, delete: if false;
+      }
+
+      match /polls/{pollId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow delete: if false;
+      }
+    }
+
+    // --- meetings/{meetingCode} --------------------------------------------
+    // MVP-simplified: any signed-in user may update meeting docs (needed for
+    // arrayUnion-based join/leave/waiting-room flows). Tighten with a Cloud
+    // Function + transactions before a real production launch.
+    match /meetings/{meetingCode} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow update: if isSignedIn();
+      allow delete: if false;
+
+      match /chat/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      match /qna/{questionId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.askedBy == request.auth.uid;
+        allow update: if isSignedIn();
+        allow delete: if false;
+      }
+
+      match /polls/{pollId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isSignedIn();
+        allow delete: if false;
+      }
+
+      // Written ONLY by the backend via the Admin SDK (bypasses these rules) —
+      // clients are strictly read-only for live-stream state.
+      match /meta/{docId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    // --- communities/{communityId} — umbrella over multiple groups --------
+    match /communities/{communityId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      // MVP-simplified like meetings: any signed-in user may update (needed
+      // for arrayUnion-based join/leave). Tighten with a Cloud Function
+      // before a real production launch.
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && request.auth.uid in resource.data.admins;
+
+      match /announcements/{announcementId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.postedBy == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // --- calls/{callId} — 1-1 call signaling -------------------------------
+    match /calls/{callId} {
+      allow read, update: if isSignedIn()
+                          && (request.auth.uid == resource.data.callerUid || request.auth.uid == resource.data.calleeUid);
+      allow create: if isSignedIn() && request.resource.data.callerUid == request.auth.uid;
+      allow delete: if false;
+
+      match /{candidateCollection}/{candidateId} {
+        allow read, create: if isSignedIn()
+                            && (request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.callerUid
+                                || request.auth.uid == get(/databases/$(database)/documents/calls/$(callId)).data.calleeUid);
+        allow update, delete: if false;
+      }
+    }
+
+    // --- spots/{spotId} — Spot stories, 24h expiry (see TTL note below) ---
+    match /spots/{spotId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      // Author can edit their own spot (used for view/reaction updates from
+      // OTHER users too — Spot reactions/views need any signed-in user to
+      // write to viewedBy/reactions on someone else's doc).
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // --- blocks/{uid_blockedUid} --------------------------------------------
+    match /blocks/{blockId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.blockerUid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.blockerUid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // --- reports/{reportId} — write-only from clients, read by nobody but admins (Console) ---
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    // Everything else (including youtubeTokens/, which the backend alone
+    // writes via the Admin SDK) is closed by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

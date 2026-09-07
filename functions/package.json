@@ -1,0 +1,14 @@
+{
+  "name": "gi-meet-functions",
+  "private": true,
+  "engines": { "node": "20" },
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1"
+  }
+}
