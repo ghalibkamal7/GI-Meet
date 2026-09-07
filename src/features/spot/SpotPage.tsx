@@ -15,7 +15,7 @@ export function SpotPage() {
   useEffect(() => {
     if (!profile) return;
     const unsub1 = subscribeToMySpots(profile.uid, setMySpots);
-    let unsub2 = () => undefined;
+    let unsub2: () => void = () => {};
     getContacts(profile.uid).then((contacts) => {
       unsub2 = subscribeToSpotsFromUsers(contacts, setContactSpots);
     });

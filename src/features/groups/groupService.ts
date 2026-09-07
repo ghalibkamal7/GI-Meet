@@ -52,6 +52,7 @@ export async function createGroup(params: {
     mutedBy: [],
     pinnedMessageIds: [],
     isRoom: Boolean(params.isRoom),
+communityId: null,
   });
   return docRef.id;
 }
@@ -95,6 +96,7 @@ function docToGroup(d: QueryDocumentSnapshot<DocumentData>): Group {
     mutedBy: data.mutedBy ?? [],
     pinnedMessageIds: data.pinnedMessageIds ?? [],
     isRoom: Boolean(data.isRoom),
+communityId: data.communityId ?? null,
   };
 }
 

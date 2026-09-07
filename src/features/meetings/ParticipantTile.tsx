@@ -77,7 +77,7 @@ export function ParticipantTile({
       )}
 
       <div
-        title={`Connection: ${ConnectionQuality[quality]}`}
+        title={`Connection: ${quality}`}
         style={{ position: 'absolute', top: 8, left: 8, width: 8, height: 8, borderRadius: '50%', background: QUALITY_COLOR[quality] }}
       />
 
