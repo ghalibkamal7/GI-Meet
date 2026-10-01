@@ -1,16 +1,37 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { subscribeToUserChats, forwardMessage } from '../../features/chat/chatService';
+import { subscribeToUserChats, sendMessage } from '../../features/chat/chatService';
 import { subscribeToUserGroups, sendGroupMessage } from '../../features/groups/groupService';
-import type { Chat } from '../../features/chat/chatTypes';
+import { ensureDeviceKeys, getSharedKeyForChat, encryptForChat } from '../../features/chat/e2ee';
+import { getMyGroupKey } from '../../features/groups/groupCrypto';
+import { uploadFile, uploadEncryptedFile } from '../../services/storageService';
+import type { Chat, Message, MessageAttachment } from '../../features/chat/chatTypes';
 import type { Group } from '../../features/groups/groupTypes';
-import type { Message } from '../../features/chat/chatTypes';
+
+async function reuploadAttachmentForDestination(
+  attachment: MessageAttachment,
+  pathPrefix: string,
+  destinationKey: CryptoKey | null
+): Promise<MessageAttachment> {
+  const res = await fetch(attachment.url);
+  const blob = await res.blob();
+  const file = new File([blob], attachment.name, { type: attachment.mimeType });
+
+  if (destinationKey) {
+    const result = await uploadEncryptedFile(file, pathPrefix, destinationKey);
+    return { ...attachment, url: result.url, encrypted: true, iv: result.iv };
+  }
+  const { promise } = uploadFile(file, pathPrefix);
+  const result = await promise;
+  return { ...attachment, url: result.url, encrypted: false, iv: undefined };
+}
 
 export function ForwardMessageModal({ message, onClose }: { message: Message; onClose: () => void }) {
   const { profile } = useAuth();
   const [chats, setChats] = useState<Chat[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -24,18 +45,68 @@ export function ForwardMessageModal({ message, onClose }: { message: Message; on
 
   async function handleForwardToChat(chat: Chat) {
     if (!profile) return;
-    await forwardMessage(chat.id, profile.uid, message, profile.displayName);
+    setSendingTo(chat.id);
+    const myPrivateKey = await ensureDeviceKeys(profile.uid);
+    const otherUid = chat.participants.find((p) => p !== profile.uid);
+    const key = otherUid ? await getSharedKeyForChat(myPrivateKey, otherUid) : null;
+
+    let text = message.text;
+    let encrypted = false;
+    let iv: string | undefined;
+    if (key && message.text) {
+      const enc = await encryptForChat(key, message.text);
+      text = enc.ciphertext;
+      encrypted = true;
+      iv = enc.iv;
+    }
+
+    const attachment = message.attachment
+      ? await reuploadAttachmentForDestination(message.attachment, `chats/${chat.id}`, key)
+      : undefined;
+
+    await sendMessage({
+      chatId: chat.id,
+      senderId: profile.uid,
+      text,
+      encrypted,
+      iv,
+      attachment,
+      forwardedFrom: { senderId: message.senderId, senderName: profile.displayName },
+    });
+    setSendingTo(null);
     setSentTo(chat.id);
   }
 
   async function handleForwardToGroup(group: Group) {
     if (!profile) return;
+    setSendingTo(group.id);
+    const myPrivateKey = await ensureDeviceKeys(profile.uid);
+    const key = await getMyGroupKey(group.id, profile.uid, myPrivateKey);
+
+    let text = message.text;
+    let encrypted = false;
+    let iv: string | undefined;
+    if (key && message.text) {
+      const enc = await encryptForChat(key, message.text);
+      text = enc.ciphertext;
+      encrypted = true;
+      iv = enc.iv;
+    }
+
+    const attachment = message.attachment
+      ? await reuploadAttachmentForDestination(message.attachment, `groups/${group.id}`, key)
+      : undefined;
+
     await sendGroupMessage({
       groupId: group.id,
       senderId: profile.uid,
-      text: message.text,
-      attachment: message.attachment ?? undefined,
+      text,
+      encrypted,
+      iv,
+      attachment,
+      forwardedFrom: { senderId: message.senderId, senderName: profile.displayName },
     });
+    setSendingTo(null);
     setSentTo(group.id);
   }
 
@@ -46,8 +117,9 @@ export function ForwardMessageModal({ message, onClose }: { message: Message; on
 
         {groups.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', margin: '10px 0 4px' }}>Groups</div>}
         {groups.map((g) => (
-          <button key={g.id} onClick={() => handleForwardToGroup(g)} style={rowStyle}>
+          <button key={g.id} onClick={() => handleForwardToGroup(g)} style={rowStyle} disabled={sendingTo === g.id}>
             {g.name}
+            {sendingTo === g.id && <span style={{ color: 'var(--color-text-muted)' }}>Sending…</span>}
             {sentTo === g.id && <span style={{ color: 'var(--color-brand-600)' }}>Sent ✓</span>}
           </button>
         ))}
@@ -57,8 +129,9 @@ export function ForwardMessageModal({ message, onClose }: { message: Message; on
           const otherUid = c.participants.find((p) => p !== profile?.uid) ?? '';
           const otherInfo = c.participantInfo[otherUid];
           return (
-            <button key={c.id} onClick={() => handleForwardToChat(c)} style={rowStyle}>
+            <button key={c.id} onClick={() => handleForwardToChat(c)} style={rowStyle} disabled={sendingTo === c.id}>
               {otherInfo?.displayName ?? 'Unknown'}
+              {sendingTo === c.id && <span style={{ color: 'var(--color-text-muted)' }}>Sending…</span>}
               {sentTo === c.id && <span style={{ color: 'var(--color-brand-600)' }}>Sent ✓</span>}
             </button>
           );

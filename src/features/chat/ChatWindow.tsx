@@ -16,27 +16,33 @@ import {
   isUserBlocked,
   searchMessagesLocally,
 } from './chatService';
+import { ensureDeviceKeys, getSharedKeyForChat, encryptForChat, decryptForChat, decryptAttachmentUrl } from './e2ee';
 import { createCall } from '../calls/callService';
 import type { Chat, Message } from './chatTypes';
 import { MessageBubble } from '../../components/common/MessageBubble';
 import { MessageComposer } from '../../components/common/MessageComposer';
 import { ForwardMessageModal } from '../../components/common/ForwardMessageModal';
 import { ChatOptionsMenu } from '../../components/common/ChatOptionsMenu';
-import { uploadFile } from '../../services/storageService';
+import { uploadFile, uploadEncryptedFile } from '../../services/storageService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { usePresence } from '../../hooks/usePresence';
-import { Search, BarChart3, Phone, Video, MoreVertical, Pin } from 'lucide-react';
+import { Search, BarChart3, Phone, Video, MoreVertical, Pin, Lock } from 'lucide-react';
 import { subscribeToPolls, type Poll } from '../polls/pollService';
 import { PollCard, CreatePollModal } from '../polls/PollComponents';
 import { GiAiSummaryButton } from '../gi-ai/GiAiSummaryButton';
 import { summarizeConversation } from '../gi-ai/giAiService';
+import { useToast } from '../../context/ToastContext';
 
 export function ChatWindow() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { showToast } = useToast();
   const [chat, setChat] = useState<Chat | null>(null);
+  const [rawMessages, setRawMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
+  const [encryptionReady, setEncryptionReady] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
@@ -45,6 +51,7 @@ export function ChatWindow() {
   const [searchTerm, setSearchTerm] = useState('');
   const [blocked, setBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [showPolls, setShowPolls] = useState(false);
   const [showCreatePoll, setShowCreatePoll] = useState(false);
@@ -72,13 +79,77 @@ export function ChatWindow() {
       setLoading(false);
     });
 
-    const unsubscribe = subscribeToMessages(chatId, setMessages);
+    const unsubscribe = subscribeToMessages(chatId, setRawMessages);
     const unsubPolls = subscribeToPolls('chats', chatId, setPolls);
     return () => {
       unsubscribe();
       unsubPolls();
     };
   }, [chatId]);
+
+  useEffect(() => {
+    if (!chat || !profile) return;
+    let cancelled = false;
+    (async () => {
+      const myPrivateKey = await ensureDeviceKeys(profile.uid);
+      const otherUid = chat.participants.find((p) => p !== profile.uid);
+      const key = otherUid ? await getSharedKeyForChat(myPrivateKey, otherUid) : null;
+      if (!cancelled) {
+        setSharedKey(key);
+        setEncryptionReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chat, profile]);
+
+  useEffect(() => {
+    if (!encryptionReady) return;
+    let cancelled = false;
+    const createdUrls: string[] = [];
+    (async () => {
+      const decrypted = await Promise.all(
+        rawMessages.map(async (m) => {
+          let text = m.text;
+          let replyTo = m.replyTo;
+          let attachment = m.attachment;
+
+          if (m.encrypted) {
+            text = sharedKey
+              ? await decryptForChat(sharedKey, { ciphertext: m.text, iv: m.iv ?? '' })
+              : '🔒 Encrypted message (key unavailable)';
+          }
+
+          if (replyTo?.iv && sharedKey) {
+            try {
+              const replyText = await decryptForChat(sharedKey, { ciphertext: replyTo.text, iv: replyTo.iv });
+              replyTo = { ...replyTo, text: replyText };
+            } catch {
+              // Leave the quoted preview as-is if it can't be decrypted for any reason.
+            }
+          }
+
+          if (attachment?.encrypted && attachment.iv && sharedKey) {
+            try {
+              const objectUrl = await decryptAttachmentUrl(sharedKey, attachment.url, attachment.iv, attachment.mimeType);
+              createdUrls.push(objectUrl);
+              attachment = { ...attachment, url: objectUrl };
+            } catch {
+              // Leave the (undecryptable) original URL — it just won't render correctly, not a crash.
+            }
+          }
+
+          return { ...m, text, replyTo, attachment };
+        })
+      );
+      if (!cancelled) setMessages(decrypted);
+    })();
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [rawMessages, sharedKey, encryptionReady]);
 
   useEffect(() => {
     if (chatId && profile) markChatRead(chatId, profile.uid);
@@ -103,44 +174,99 @@ export function ChatWindow() {
   const searchResults = showSearch ? searchMessagesLocally(messages, searchTerm) : [];
 
   async function handleSend(text: string) {
+    let payloadText = text;
+    let encrypted = false;
+    let iv: string | undefined;
+    if (sharedKey) {
+      const enc = await encryptForChat(sharedKey, text);
+      payloadText = enc.ciphertext;
+      encrypted = true;
+      iv = enc.iv;
+    }
+
     if (editingMessage) {
-      await editMessage(chatId!, editingMessage.id, text);
+      await editMessage(chatId!, editingMessage.id, payloadText, encrypted ? { encrypted: true, iv: iv! } : undefined);
       setEditingMessage(null);
       return;
     }
+
+    let replyToPayload = replyingTo
+      ? { messageId: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId }
+      : undefined;
+    if (replyToPayload && sharedKey) {
+      const encReply = await encryptForChat(sharedKey, replyToPayload.text);
+      replyToPayload = { ...replyToPayload, text: encReply.ciphertext, iv: encReply.iv } as typeof replyToPayload & { iv: string };
+    }
+
     await sendMessage({
       chatId: chatId!,
       senderId: profile!.uid,
-      text,
-      replyTo: replyingTo
-        ? { messageId: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId }
-        : undefined,
+      text: payloadText,
+      encrypted,
+      iv,
+      replyTo: replyToPayload,
     });
     setReplyingTo(null);
   }
 
   async function handleSendFile(file: File) {
-    const { promise } = uploadFile(file, `chats/${chatId}`);
-    const result = await promise;
-    const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-    await sendMessage({
-      chatId: chatId!,
-      senderId: profile!.uid,
-      text: '',
-      attachment: { type, url: result.url, name: result.name, sizeBytes: result.sizeBytes, mimeType: result.mimeType },
-    });
+    setUploading(true);
+    try {
+      const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
+      let result;
+      let encrypted = false;
+      let iv: string | undefined;
+
+      if (sharedKey) {
+        result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
+        encrypted = true;
+        iv = result.iv;
+      } else {
+        const { promise } = uploadFile(file, `chats/${chatId}`);
+        result = await promise;
+      }
+
+      await sendMessage({
+        chatId: chatId!,
+        senderId: profile!.uid,
+        text: '',
+        attachment: { type, url: result.url, name: result.name, sizeBytes: result.sizeBytes, mimeType: result.mimeType, encrypted, iv },
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? `Upload failed: ${err.message}` : 'Upload failed. Please try again.', 'error');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleSendVoice(blob: Blob, durationSeconds: number) {
-    const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
-    const { promise } = uploadFile(file, `chats/${chatId}`);
-    const result = await promise;
-    await sendMessage({
-      chatId: chatId!,
-      senderId: profile!.uid,
-      text: '',
-      attachment: { type: 'audio', url: result.url, name: 'Voice message', sizeBytes: result.sizeBytes, mimeType: result.mimeType, durationSeconds },
-    });
+    setUploading(true);
+    try {
+      const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+      let result;
+      let encrypted = false;
+      let iv: string | undefined;
+
+      if (sharedKey) {
+        result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
+        encrypted = true;
+        iv = result.iv;
+      } else {
+        const { promise } = uploadFile(file, `chats/${chatId}`);
+        result = await promise;
+      }
+
+      await sendMessage({
+        chatId: chatId!,
+        senderId: profile!.uid,
+        text: '',
+        attachment: { type: 'audio', url: result.url, name: 'Voice message', sizeBytes: result.sizeBytes, mimeType: result.mimeType, durationSeconds, encrypted, iv },
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? `Voice message failed: ${err.message}` : 'Voice message failed. Please try again.', 'error');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleStartCall(type: 'voice' | 'video') {
@@ -179,6 +305,11 @@ export function ChatWindow() {
             {otherInfo?.displayName ?? 'Unknown user'}
             {presence.visible && presence.isOnline && (
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
+            )}
+            {sharedKey && (
+              <span title="End-to-end encrypted" style={{ display: 'flex', color: 'var(--color-brand-600)' }}>
+                <Lock size={12} strokeWidth={1.75} />
+              </span>
             )}
           </div>
           {chat.typing[otherUid] ? (
@@ -259,6 +390,7 @@ export function ChatWindow() {
             isPinned={chat.pinnedMessageIds.includes(m.id)}
           />
         ))}
+        {uploading && <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Uploading…</p>}
       </div>
 
       {editingMessage && (

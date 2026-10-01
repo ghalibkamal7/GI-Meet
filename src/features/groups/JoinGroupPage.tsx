@@ -23,6 +23,8 @@ export function JoinGroupPage() {
     });
   }, [inviteCode]);
 
+  const alreadyMember = Boolean(group && profile && group.members.includes(profile.uid));
+
   async function handleJoin() {
     if (!profile || !inviteCode) return;
     setJoining(true);
@@ -46,10 +48,18 @@ export function JoinGroupPage() {
           <>
             <h2 style={{ marginBottom: 8 }}>{group?.name}</h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 4 }}>{group?.description}</p>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 20 }}>{group?.members.length} members</p>
-            <button className="rb-btn rb-btn--primary" style={{ width: '100%' }} onClick={handleJoin} disabled={joining}>
-              {joining ? 'Joining…' : 'Join group'}
-            </button>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 20 }}>
+              {group?.members.length} members
+            </p>
+            {alreadyMember ? (
+              <button className="rb-btn rb-btn--primary" style={{ width: '100%' }} onClick={() => navigate(`/groups/${group!.id}`)}>
+                You're already in this group — Open it
+              </button>
+            ) : (
+              <button className="rb-btn rb-btn--primary" style={{ width: '100%' }} onClick={handleJoin} disabled={joining}>
+                {joining ? 'Joining…' : 'Join group'}
+              </button>
+            )}
           </>
         )}
       </div>

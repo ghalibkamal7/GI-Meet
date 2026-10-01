@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { createUserProfile, isUsernameTaken } from '../../services/userService';
 import { isValidUsername, normalizeUsername } from '../../utils/validators';
+import { ensureDeviceKeys } from '../chat/e2ee';
+import { consumeRedirectTarget } from '../../utils/redirectAfterLogin';
 
 export function ProfileSetup() {
   const { firebaseUser, refreshProfile } = useAuth();
@@ -13,7 +15,6 @@ export function ProfileSetup() {
   const [submitting, setSubmitting] = useState(false);
 
   if (!firebaseUser) {
-    // ProtectedRoute-style pages should prevent this, but guard anyway.
     navigate('/login');
     return null;
   }
@@ -47,8 +48,14 @@ export function ProfileSetup() {
         bio,
       });
 
+      try {
+        await ensureDeviceKeys(firebaseUser!.uid);
+      } catch {
+        // Non-fatal — chats will fall back to plaintext until a key exists.
+      }
+
       await refreshProfile();
-      navigate('/');
+      navigate(consumeRedirectTarget() ?? '/');
     } catch (err) {
       if (err instanceof Error && err.message === 'username-taken') {
         setError('That username was just taken. Try another one.');
@@ -61,15 +68,7 @@ export function ProfileSetup() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
-    >
+    <div style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div className="rb-card" style={{ width: '100%', maxWidth: 420, padding: 32 }}>
         <h1 style={{ fontSize: 24, marginBottom: 4 }}>Set up your profile</h1>
         <p style={{ color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 24 }}>

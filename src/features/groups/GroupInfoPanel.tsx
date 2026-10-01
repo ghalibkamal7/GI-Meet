@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Link2, Bell, BellOff, FolderOpen } from 'lucide-react';
+import { Link2, Bell, BellOff, FolderOpen, UserPlus } from 'lucide-react';
 import type { Group } from './groupTypes';
 import { removeMember, makeAdmin, makeCoAdmin, removeCoAdmin, leaveGroup, updateGroupInfo, toggleMuteGroup, toggleGroupAsRoom } from './groupService';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { useToast } from '../../context/ToastContext';
+import { AddMemberModal } from './AddMemberModal';
 
 interface Props {
   group: Group;
@@ -24,6 +25,7 @@ export function GroupInfoPanel({ group, currentUid, onClose, onLeft }: Props) {
   const isMuted = group.mutedBy.includes(currentUid);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [removingUid, setRemovingUid] = useState<string | null>(null);
+  const [showAddMember, setShowAddMember] = useState(false);
 
   async function handleSaveInfo() {
     await updateGroupInfo(group.id, { name, description });
@@ -77,7 +79,19 @@ export function GroupInfoPanel({ group, currentUid, onClose, onLeft }: Props) {
           </label>
         )}
 
-        <h4 style={{ fontSize: 14, marginBottom: 8 }}>Members ({group.members.length})</h4>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h4 style={{ fontSize: 14 }}>Members ({group.members.length})</h4>
+          {canManage && (
+            <button
+              className="rb-btn rb-btn--outline"
+              style={{ padding: '4px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+              onClick={() => setShowAddMember(true)}
+            >
+              <UserPlus size={13} strokeWidth={1.75} /> Add member
+            </button>
+          )}
+        </div>
+
         {group.members.map((uid) => {
           const info = group.memberInfo[uid];
           const memberIsAdmin = group.admins.includes(uid);
@@ -119,6 +133,10 @@ export function GroupInfoPanel({ group, currentUid, onClose, onLeft }: Props) {
           Leave group
         </button>
       </div>
+
+      {showAddMember && (
+        <AddMemberModal groupId={group.id} existingMemberUids={group.members} onClose={() => setShowAddMember(false)} />
+      )}
 
       {showLeaveConfirm && (
         <ConfirmDialog

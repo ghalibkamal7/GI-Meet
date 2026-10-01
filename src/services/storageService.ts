@@ -1,6 +1,7 @@
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase/firebaseConfig';
 import { appConfig } from '../config/appConfig';
+import { encryptBytes, fromBase64 } from './cryptoService';
 
 export interface UploadResult {
   url: string;
@@ -22,11 +23,6 @@ export function validateFile(file: File): { valid: boolean; message?: string } {
   return { valid: true };
 }
 
-/**
- * Uploads a file to a scoped storage path with progress reporting.
- * `pathPrefix` examples: `chats/{chatId}`, `groups/{groupId}`, `profile-photos/{uid}`.
- * Storage security rules (storage.rules) enforce who can actually write to each prefix.
- */
 export function uploadFile(
   file: File,
   pathPrefix: string,
@@ -52,4 +48,25 @@ export function uploadFile(
   });
 
   return { promise, cancel: () => task.cancel() };
+}
+
+/**
+ * Encrypts the file's bytes client-side (AES-GCM, the same key as the
+ * chat/group's text messages) before upload — Firebase Storage only ever
+ * receives ciphertext. Uploaded with a generic content-type since the
+ * stored bytes are no longer a real image/video/etc.
+ */
+export async function uploadEncryptedFile(
+  file: File,
+  pathPrefix: string,
+  key: CryptoKey,
+  onProgress?: (percent: number) => void
+): Promise<UploadResult & { iv: string }> {
+  const fileBuffer = await file.arrayBuffer();
+  const { ciphertext, iv } = await encryptBytes(key, fileBuffer);
+  const encryptedFile = new File([fromBase64(ciphertext)], file.name, { type: 'application/octet-stream' });
+
+  const { promise } = uploadFile(encryptedFile, pathPrefix, onProgress);
+  const result = await promise;
+  return { ...result, name: file.name, mimeType: file.type, iv };
 }

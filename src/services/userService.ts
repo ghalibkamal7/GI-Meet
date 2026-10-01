@@ -10,15 +10,6 @@ import { db } from '../firebase/firebaseConfig';
 import type { UserProfile } from '../utils/types';
 import { normalizeUsername } from '../utils/validators';
 
-/**
- * Firestore layout for this phase:
- *   users/{uid}            -> UserProfile
- *   usernames/{username}   -> { uid }   (reservation doc so usernames are unique)
- *
- * The usernames collection exists purely so security rules + a transaction
- * can guarantee "one username, one uid" without needing a Cloud Function.
- */
-
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return null;
@@ -30,10 +21,6 @@ export async function isUsernameTaken(username: string): Promise<boolean> {
   return snap.exists();
 }
 
-/**
- * Creates a brand-new profile + reserves the username atomically.
- * Throws 'username-taken' if another user already grabbed it in the meantime.
- */
 export async function createUserProfile(params: {
   uid: string;
   email: string;
@@ -83,6 +70,11 @@ export async function updateProfileFields(
   updates: Partial<Pick<UserProfile, 'displayName' | 'bio' | 'photoURL'>>
 ): Promise<void> {
   await setDoc(doc(db, 'users', uid), updates, { merge: true });
+}
+
+/** Publishes this device's E2EE public key so others can encrypt messages to this user. */
+export async function updateUserPublicKey(uid: string, publicKeyJwk: string): Promise<void> {
+  await setDoc(doc(db, 'users', uid), { publicKeyJwk }, { merge: true });
 }
 
 export async function updatePrivacySettings(

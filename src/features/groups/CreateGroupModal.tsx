@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { searchUsersByUsername } from '../../services/searchService';
 import type { UserProfile } from '../../utils/types';
 import { createGroup } from './groupService';
+import { provisionGroupKey } from './groupCrypto';
+import { ensureDeviceKeys } from '../chat/e2ee';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -61,6 +63,13 @@ export function CreateGroupModal({ onClose }: { onClose: () => void }) {
       members,
       memberInfo,
     });
+
+    try {
+      const creatorPrivateKey = await ensureDeviceKeys(profile.uid);
+      await provisionGroupKey(groupId, members, profile.uid, creatorPrivateKey);
+    } catch {
+      // Non-fatal — group chat still works, just without encryption yet.
+    }
 
     setSubmitting(false);
     onClose();

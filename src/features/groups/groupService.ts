@@ -6,16 +6,17 @@ import {
   deleteDoc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   where,
   orderBy,
   limit,
-  onSnapshot,
   serverTimestamp,
   arrayUnion,
   arrayRemove,
   type QueryDocumentSnapshot,
   type DocumentData,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import type { Group, Announcement } from './groupTypes';
@@ -52,7 +53,7 @@ export async function createGroup(params: {
     mutedBy: [],
     pinnedMessageIds: [],
     isRoom: Boolean(params.isRoom),
-communityId: null,
+    communityId: null,
   });
   return docRef.id;
 }
@@ -64,6 +65,12 @@ export function subscribeToUserGroups(uid: string, callback: (groups: Group[]) =
     orderBy('lastMessageAt', 'desc')
   );
   return onSnapshot(q, (snap) => callback(snap.docs.map(docToGroup)));
+}
+
+export function subscribeToGroup(groupId: string, callback: (group: Group | null) => void): Unsubscribe {
+  return onSnapshot(doc(db, 'groups', groupId), (snap) => {
+    callback(snap.exists() ? docToGroup(snap as QueryDocumentSnapshot<DocumentData>) : null);
+  });
 }
 
 export async function getGroup(groupId: string): Promise<Group | null> {
@@ -96,7 +103,7 @@ function docToGroup(d: QueryDocumentSnapshot<DocumentData>): Group {
     mutedBy: data.mutedBy ?? [],
     pinnedMessageIds: data.pinnedMessageIds ?? [],
     isRoom: Boolean(data.isRoom),
-communityId: data.communityId ?? null,
+    communityId: data.communityId ?? null,
   };
 }
 
@@ -159,8 +166,6 @@ export async function deleteGroup(groupId: string): Promise<void> {
   await deleteDoc(doc(db, 'groups', groupId));
 }
 
-// --- Announcements ---------------------------------------------------------
-
 export async function postAnnouncement(groupId: string, postedBy: string, postedByName: string, text: string): Promise<void> {
   await addDoc(collection(db, 'groups', groupId, 'announcements'), {
     text: text.trim(),
@@ -181,8 +186,6 @@ export function subscribeToAnnouncements(groupId: string, callback: (items: Anno
     )
   );
 }
-
-// --- Group messages (mirrors chatService, separate collection) -----------
 
 export function subscribeToGroupMessages(groupId: string, callback: (messages: Message[]) => void) {
   const q = query(collection(db, 'groups', groupId, 'messages'), orderBy('createdAt', 'desc'), limit(30));
@@ -205,6 +208,8 @@ function docToMessage(d: QueryDocumentSnapshot<DocumentData>): Message {
     attachment: data.attachment ?? null,
     reactions: data.reactions ?? {},
     starredBy: data.starredBy ?? [],
+    encrypted: Boolean(data.encrypted),
+iv: data.iv ?? null,
   };
 }
 
@@ -212,6 +217,8 @@ export async function sendGroupMessage(params: {
   groupId: string;
   senderId: string;
   text: string;
+  encrypted?: boolean;
+  iv?: string;
   replyTo?: Message['replyTo'];
   attachment?: Message['attachment'];
   forwardedFrom?: Message['forwardedFrom'];
@@ -223,6 +230,8 @@ export async function sendGroupMessage(params: {
     chatId: params.groupId,
     senderId: params.senderId,
     text: trimmed,
+    encrypted: Boolean(params.encrypted),
+    iv: params.iv ?? null,
     createdAt: serverTimestamp(),
     editedAt: null,
     readBy: [params.senderId],
@@ -239,11 +248,21 @@ export async function sendGroupMessage(params: {
     lastMessageAt: serverTimestamp(),
   });
 }
-
-export async function editGroupMessage(groupId: string, messageId: string, newText: string): Promise<void> {
+export async function editGroupMessage(
+  groupId: string,
+  messageId: string,
+  newText: string,
+  encryption?: { encrypted: boolean; iv: string }
+): Promise<void> {
   const trimmed = newText.trim();
   if (!trimmed) return;
-  await updateDoc(doc(db, 'groups', groupId, 'messages', messageId), { text: trimmed, editedAt: serverTimestamp() });
+
+  await updateDoc(doc(db, 'groups', groupId, 'messages', messageId), {
+    text: trimmed,
+    encrypted: encryption?.encrypted ?? false,
+    iv: encryption?.iv ?? null,
+    editedAt: serverTimestamp(),
+  });
 }
 
 export async function deleteGroupMessage(groupId: string, messageId: string): Promise<void> {

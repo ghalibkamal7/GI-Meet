@@ -1,6 +1,6 @@
 export interface Chat {
   id: string;
-  participants: string[]; // exactly 2 uids for 1-1 chats
+  participants: string[];
   participantInfo: Record<string, { displayName: string; photoURL: string | null }>;
   lastMessage: string;
   lastMessageAt: number;
@@ -9,8 +9,8 @@ export interface Chat {
   pinnedMessageIds: string[];
   mutedBy: string[];
   archivedBy: string[];
-  hiddenFor: string[]; // per-user "delete chat" — hides without deleting the other side's copy
-  lastReadAt: Record<string, number>; // uid -> epoch ms, drives unread counts
+  hiddenFor: string[];
+  lastReadAt: Record<string, number>;
 }
 
 export interface Message {
@@ -21,12 +21,14 @@ export interface Message {
   createdAt: number;
   editedAt: number | null;
   readBy: string[];
-  replyTo: { messageId: string; text: string; senderId: string } | null;
+  replyTo: { messageId: string; text: string; senderId: string; iv?: string } | null;
   forwardedFrom: { senderId: string; senderName: string } | null;
   deleted: boolean;
   attachment: MessageAttachment | null;
-  reactions: Record<string, string[]>; // emoji -> uids who reacted
+  reactions: Record<string, string[]>;
   starredBy: string[];
+  encrypted: boolean;
+  iv: string | null;
 }
 
 export interface MessageAttachment {
@@ -35,5 +37,7 @@ export interface MessageAttachment {
   name: string;
   sizeBytes: number;
   mimeType: string;
-  durationSeconds?: number; // for audio/video
+  durationSeconds?: number;
+  encrypted?: boolean;
+  iv?: string | null;
 }

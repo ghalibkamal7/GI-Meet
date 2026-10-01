@@ -24,7 +24,6 @@ import type { Chat, Message } from './chatTypes';
 
 const MESSAGES_PAGE_SIZE = 30;
 
-/** Deterministic chat id for a 1-1 chat so we never create duplicates. */
 export function directChatId(uidA: string, uidB: string): string {
   return [uidA, uidB].sort().join('_');
 }
@@ -57,7 +56,6 @@ export async function getOrCreateDirectChat(
       lastReadAt: {},
     });
   } else if (snap.data().hiddenFor?.includes(currentUid)) {
-    // Re-opening a chat you'd previously "deleted" un-hides it for you again.
     await updateDoc(chatRef, { hiddenFor: arrayRemove(currentUid) });
   }
 
@@ -95,10 +93,7 @@ function docToChat(d: QueryDocumentSnapshot<DocumentData>): Chat {
   };
 }
 
-export function subscribeToMessages(
-  chatId: string,
-  callback: (messages: Message[]) => void
-) {
+export function subscribeToMessages(chatId: string, callback: (messages: Message[]) => void) {
   const q = query(
     collection(db, 'chats', chatId, 'messages'),
     orderBy('createdAt', 'desc'),
@@ -111,7 +106,6 @@ export function subscribeToMessages(
   });
 }
 
-/** Loads an older page of messages, for infinite-scroll-up pagination. */
 export async function loadOlderMessages(
   chatId: string,
   oldestLoaded: QueryDocumentSnapshot<DocumentData>
@@ -142,6 +136,8 @@ function docToMessage(d: QueryDocumentSnapshot<DocumentData>): Message {
     attachment: data.attachment ?? null,
     reactions: data.reactions ?? {},
     starredBy: data.starredBy ?? [],
+    encrypted: Boolean(data.encrypted),
+    iv: data.iv ?? null,
   };
 }
 
@@ -152,6 +148,8 @@ export async function sendMessage(params: {
   replyTo?: Message['replyTo'];
   attachment?: Message['attachment'];
   forwardedFrom?: Message['forwardedFrom'];
+  encrypted?: boolean;
+  iv?: string;
 }): Promise<void> {
   const trimmed = params.text.trim();
   if (!trimmed && !params.attachment) return;
@@ -169,17 +167,18 @@ export async function sendMessage(params: {
     attachment: params.attachment ?? null,
     reactions: {},
     starredBy: [],
+    encrypted: Boolean(params.encrypted),
+    iv: params.iv ?? null,
   });
 
   await updateDoc(doc(db, 'chats', params.chatId), {
-    lastMessage: params.attachment ? `📎 ${params.attachment.name}` : trimmed,
+    lastMessage: params.attachment ? `📎 ${params.attachment.name}` : params.encrypted ? '🔒 Encrypted message' : trimmed,
     lastMessageAt: serverTimestamp(),
     lastMessageSenderId: params.senderId,
-    hiddenFor: [], // a new message un-hides the chat for both sides
+    hiddenFor: [],
   });
 }
 
-/** Forwards an existing message (text/attachment) into another chat as a new message. */
 export async function forwardMessage(
   targetChatId: string,
   senderId: string,
@@ -195,12 +194,14 @@ export async function forwardMessage(
   });
 }
 
-export async function editMessage(chatId: string, messageId: string, newText: string): Promise<void> {
+export async function editMessage(chatId: string, messageId: string, newText: string, encryption?: { encrypted: boolean; iv: string }): Promise<void> {
   const trimmed = newText.trim();
   if (!trimmed) return;
   await updateDoc(doc(db, 'chats', chatId, 'messages', messageId), {
     text: trimmed,
     editedAt: serverTimestamp(),
+    encrypted: Boolean(encryption?.encrypted),
+    iv: encryption?.iv ?? null,
   });
 }
 
@@ -231,17 +232,12 @@ export async function togglePin(chatId: string, messageId: string, alreadyPinned
   });
 }
 
-export async function markMessageRead(
-  chatId: string,
-  messageId: string,
-  uid: string
-): Promise<void> {
+export async function markMessageRead(chatId: string, messageId: string, uid: string): Promise<void> {
   await updateDoc(doc(db, 'chats', chatId, 'messages', messageId), {
     readBy: arrayUnion(uid),
   });
 }
 
-/** Marks the whole chat "read up to now" for unread-count purposes. */
 export async function markChatRead(chatId: string, uid: string): Promise<void> {
   await updateDoc(doc(db, 'chats', chatId), {
     [`lastReadAt.${uid}`]: serverTimestamp(),
@@ -266,7 +262,6 @@ export async function toggleArchiveChat(chatId: string, uid: string, archived: b
   });
 }
 
-/** "Delete chat" — hides it from this user's list only; the other participant still sees theirs. */
 export async function deleteChatForMe(chatId: string, uid: string): Promise<void> {
   await updateDoc(doc(db, 'chats', chatId), {
     hiddenFor: arrayUnion(uid),
@@ -279,14 +274,11 @@ export async function getStarredMessages(chatId: string, uid: string): Promise<M
   return snap.docs.map(docToMessage);
 }
 
-/** Simple client-side search over already-fetched messages (loaded chats only). */
 export function searchMessagesLocally(messages: Message[], term: string): Message[] {
   const lower = term.trim().toLowerCase();
   if (!lower) return [];
   return messages.filter((m) => !m.deleted && m.text.toLowerCase().includes(lower));
 }
-
-// --- Block / report (top-level, not chat-scoped) --------------------------
 
 export async function blockUser(uid: string, blockedUid: string): Promise<void> {
   await setDoc(doc(db, 'blocks', `${uid}_${blockedUid}`), {

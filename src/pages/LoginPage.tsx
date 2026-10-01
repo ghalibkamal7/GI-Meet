@@ -4,6 +4,7 @@ import { signInWithEmail, signInWithGoogle, getAuthErrorMessage } from '../fireb
 import { appConfig } from '../config/appConfig';
 import { BrandMark } from '../components/common/BrandMark';
 import { GoogleLogo } from '../components/common/GoogleLogo';
+import { consumeRedirectTarget } from '../utils/redirectAfterLogin';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await signInWithEmail(email, password);
-      navigate('/');
+      navigate(consumeRedirectTarget() ?? '/');
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {
@@ -31,7 +32,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await signInWithGoogle();
-      navigate('/');
+      navigate(consumeRedirectTarget() ?? '/');
     } catch (err) {
       setError(getAuthErrorMessage(err));
     } finally {

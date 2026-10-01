@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
-  getGroup,
+  subscribeToGroup,
   subscribeToGroupMessages,
   sendGroupMessage,
   editGroupMessage,
@@ -13,12 +13,14 @@ import {
   subscribeToAnnouncements,
   postAnnouncement,
 } from './groupService';
+import { getMyGroupKey } from './groupCrypto';
+import { ensureDeviceKeys, encryptForChat, decryptForChat, decryptAttachmentUrl } from '../chat/e2ee';
 import type { Group, Announcement } from './groupTypes';
 import type { Message } from '../chat/chatTypes';
 import { MessageBubble } from '../../components/common/MessageBubble';
 import { MessageComposer } from '../../components/common/MessageComposer';
 import { ForwardMessageModal } from '../../components/common/ForwardMessageModal';
-import { uploadFile } from '../../services/storageService';
+import { uploadFile, uploadEncryptedFile } from '../../services/storageService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { GroupInfoPanel } from './GroupInfoPanel';
 import { createMeeting } from '../meetings/meetingService';
@@ -26,14 +28,19 @@ import { subscribeToPolls, type Poll } from '../polls/pollService';
 import { PollCard, CreatePollModal } from '../polls/PollComponents';
 import { GiAiSummaryButton } from '../gi-ai/GiAiSummaryButton';
 import { summarizeConversation } from '../gi-ai/giAiService';
-import { Phone, Video, BarChart3, Megaphone, Pin } from 'lucide-react';
+import { Phone, Video, BarChart3, Megaphone, Pin, Lock } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 export function GroupChat() {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { showToast } = useToast();
   const [group, setGroup] = useState<Group | null>(null);
+  const [rawMessages, setRawMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [groupKey, setGroupKey] = useState<CryptoKey | null>(null);
+  const [encryptionReady, setEncryptionReady] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
@@ -45,22 +52,87 @@ export function GroupChat() {
   const [showAnnounceForm, setShowAnnounceForm] = useState(false);
   const [announceText, setAnnounceText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!groupId) return;
-    getGroup(groupId).then((g) => {
+    const u1 = subscribeToGroup(groupId, (g) => {
       setGroup(g);
       setLoading(false);
     });
-    const u1 = subscribeToGroupMessages(groupId, setMessages);
-    const u2 = subscribeToPolls('groups', groupId, setPolls);
-    const u3 = subscribeToAnnouncements(groupId, setAnnouncements);
+    const u2 = subscribeToGroupMessages(groupId, setRawMessages);
+    const u3 = subscribeToPolls('groups', groupId, setPolls);
+    const u4 = subscribeToAnnouncements(groupId, setAnnouncements);
     return () => {
       u1();
       u2();
       u3();
+      u4();
     };
   }, [groupId]);
+
+  useEffect(() => {
+    if (!groupId || !profile) return;
+    let cancelled = false;
+    (async () => {
+      const myPrivateKey = await ensureDeviceKeys(profile.uid);
+      const key = await getMyGroupKey(groupId, profile.uid, myPrivateKey);
+      if (!cancelled) {
+        setGroupKey(key);
+        setEncryptionReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, profile]);
+
+  useEffect(() => {
+    if (!encryptionReady) return;
+    let cancelled = false;
+    const createdUrls: string[] = [];
+    (async () => {
+      const decrypted = await Promise.all(
+        rawMessages.map(async (m) => {
+          let text = m.text;
+          let replyTo = m.replyTo;
+          let attachment = m.attachment;
+
+          if (m.encrypted) {
+            text = groupKey
+              ? await decryptForChat(groupKey, { ciphertext: m.text, iv: m.iv ?? '' })
+              : '🔒 Encrypted message (key unavailable)';
+          }
+
+          if (replyTo?.iv && groupKey) {
+            try {
+              const replyText = await decryptForChat(groupKey, { ciphertext: replyTo.text, iv: replyTo.iv });
+              replyTo = { ...replyTo, text: replyText };
+            } catch {
+              // Leave as-is if it can't be decrypted.
+            }
+          }
+
+          if (attachment?.encrypted && attachment.iv && groupKey) {
+            try {
+              const objectUrl = await decryptAttachmentUrl(groupKey, attachment.url, attachment.iv, attachment.mimeType);
+              createdUrls.push(objectUrl);
+              attachment = { ...attachment, url: objectUrl };
+            } catch {
+              // Leave the original (undecryptable) URL rather than crash.
+            }
+          }
+
+          return { ...m, text, replyTo, attachment };
+        })
+      );
+      if (!cancelled) setMessages(decrypted);
+    })();
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [rawMessages, groupKey, encryptionReady]);
 
   if (loading) return <LoadingSpinner label="Loading group…" />;
   if (!group || !profile || !groupId) return <div style={{ padding: 24 }}>Group not found.</div>;
@@ -69,42 +141,99 @@ export function GroupChat() {
   const latestAnnouncement = announcements[0];
 
   async function handleSend(text: string) {
+    let payloadText = text;
+    let encrypted = false;
+    let iv: string | undefined;
+    if (groupKey) {
+      const enc = await encryptForChat(groupKey, text);
+      payloadText = enc.ciphertext;
+      encrypted = true;
+      iv = enc.iv;
+    }
+
     if (editingMessage) {
-      await editGroupMessage(groupId!, editingMessage.id, text);
+      await editGroupMessage(groupId!, editingMessage.id, payloadText, encrypted ? { encrypted: true, iv: iv! } : undefined);
       setEditingMessage(null);
       return;
     }
+
+    let replyToPayload = replyingTo
+      ? { messageId: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId }
+      : undefined;
+    if (replyToPayload && groupKey) {
+      const encReply = await encryptForChat(groupKey, replyToPayload.text);
+      replyToPayload = { ...replyToPayload, text: encReply.ciphertext, iv: encReply.iv } as typeof replyToPayload & { iv: string };
+    }
+
     await sendGroupMessage({
       groupId: groupId!,
       senderId: profile!.uid,
-      text,
-      replyTo: replyingTo ? { messageId: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : undefined,
+      text: payloadText,
+      encrypted,
+      iv,
+      replyTo: replyToPayload,
     });
     setReplyingTo(null);
   }
 
   async function handleSendFile(file: File) {
-    const { promise } = uploadFile(file, `groups/${groupId}`);
-    const result = await promise;
-    const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-    await sendGroupMessage({
-      groupId: groupId!,
-      senderId: profile!.uid,
-      text: '',
-      attachment: { type, url: result.url, name: result.name, sizeBytes: result.sizeBytes, mimeType: result.mimeType },
-    });
+    setUploading(true);
+    try {
+      const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
+      let result;
+      let encrypted = false;
+      let iv: string | undefined;
+
+      if (groupKey) {
+        result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
+        encrypted = true;
+        iv = result.iv;
+      } else {
+        const { promise } = uploadFile(file, `groups/${groupId}`);
+        result = await promise;
+      }
+
+      await sendGroupMessage({
+        groupId: groupId!,
+        senderId: profile!.uid,
+        text: '',
+        attachment: { type, url: result.url, name: result.name, sizeBytes: result.sizeBytes, mimeType: result.mimeType, encrypted, iv },
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? `Upload failed: ${err.message}` : 'Upload failed. Please try again.', 'error');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleSendVoice(blob: Blob, durationSeconds: number) {
-    const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
-    const { promise } = uploadFile(file, `groups/${groupId}`);
-    const result = await promise;
-    await sendGroupMessage({
-      groupId: groupId!,
-      senderId: profile!.uid,
-      text: '',
-      attachment: { type: 'audio', url: result.url, name: 'Voice message', sizeBytes: result.sizeBytes, mimeType: result.mimeType, durationSeconds },
-    });
+    setUploading(true);
+    try {
+      const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+      let result;
+      let encrypted = false;
+      let iv: string | undefined;
+
+      if (groupKey) {
+        result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
+        encrypted = true;
+        iv = result.iv;
+      } else {
+        const { promise } = uploadFile(file, `groups/${groupId}`);
+        result = await promise;
+      }
+
+      await sendGroupMessage({
+        groupId: groupId!,
+        senderId: profile!.uid,
+        text: '',
+        attachment: { type: 'audio', url: result.url, name: 'Voice message', sizeBytes: result.sizeBytes, mimeType: result.mimeType, durationSeconds, encrypted, iv },
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? `Voice message failed: ${err.message}` : 'Voice message failed. Please try again.', 'error');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleStartMeeting(audioOnly: boolean) {
@@ -120,8 +249,13 @@ export function GroupChat() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowInfo(true)}>
+        <div style={{ fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowInfo(true)}>
           {group.name} <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--color-text-muted)' }}>({group.members.length})</span>
+          {groupKey && (
+            <span title="End-to-end encrypted" style={{ display: 'flex', color: 'var(--color-brand-600)' }}>
+              <Lock size={12} strokeWidth={1.75} />
+            </span>
+          )}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="rb-btn rb-btn--outline rb-icon-btn" title="Start voice call" onClick={() => handleStartMeeting(true)}><Phone size={16} strokeWidth={1.75} /></button>
@@ -199,6 +333,7 @@ export function GroupChat() {
             isPinned={group.pinnedMessageIds.includes(m.id)}
           />
         ))}
+        {uploading && <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Uploading…</p>}
       </div>
 
       {editingMessage && (

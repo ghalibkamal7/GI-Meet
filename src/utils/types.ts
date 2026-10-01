@@ -4,8 +4,8 @@ export interface UserProfile {
   username: string;
   email: string;
   photoURL: string | null;
-  createdAt: number; // epoch ms
-  lastSeen: number; // epoch ms
+  createdAt: number;
+  lastSeen: number;
   isOnline: boolean;
   bio: string;
   privacy?: {
@@ -13,4 +13,5 @@ export interface UserProfile {
     showOnlineStatus: boolean;
   };
   fcmTokens?: string[];
+  publicKeyJwk?: string | null;
 }
