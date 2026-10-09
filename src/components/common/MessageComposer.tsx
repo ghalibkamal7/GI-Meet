@@ -1,9 +1,10 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
-import { Smile, Paperclip, SendHorizontal, X } from 'lucide-react';
+import { Smile, Paperclip, SendHorizontal, X, Camera as CameraIcon } from 'lucide-react';
 import type { Message } from '../../features/chat/chatTypes';
 import { validateFile } from '../../services/storageService';
 import { EmojiPicker } from './EmojiPicker';
 import { VoiceRecorderButton } from './VoiceRecorderButton';
+import { isNativePlatform } from '../../utils/platform';
 
 interface Props {
   replyingTo: Message | null;
@@ -65,6 +66,33 @@ export function MessageComposer({
     onSendFile(file);
   }
 
+  async function handleCameraCapture() {
+    if (!onSendFile) return;
+    try {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Prompt,
+      });
+      if (!photo.webPath) return;
+
+      const response = await fetch(photo.webPath);
+      const blob = await response.blob();
+      const file = new File([blob], `photo-${Date.now()}.jpeg`, { type: blob.type || 'image/jpeg' });
+
+      const check = validateFile(file);
+      if (!check.valid) {
+        setFileError(check.message ?? 'Invalid file.');
+        return;
+      }
+      setFileError(null);
+      onSendFile(file);
+    } catch {
+      // User cancelled the picker, or camera/photos permission was denied — no-op.
+    }
+  }
+
   return (
     <div style={{ borderTop: '1px solid var(--color-border)', padding: '12px 16px', background: 'var(--color-surface)' }}>
       {replyingTo && (
@@ -98,6 +126,12 @@ export function MessageComposer({
             <EmojiPicker onSelect={(emoji) => handleChange(text + emoji)} onClose={() => setShowEmoji(false)} />
           )}
         </div>
+
+        {onSendFile && isNativePlatform() && (
+          <button type="button" onClick={handleCameraCapture} style={iconBtnStyle} aria-label="Camera">
+            <CameraIcon size={19} strokeWidth={1.75} />
+          </button>
+        )}
 
         {onSendFile && (
           <>

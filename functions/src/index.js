@@ -7,14 +7,17 @@ initializeApp();
 const db = getFirestore();
 const messaging = getMessaging();
 
-async function sendToUser(uid, notification) {
+async function sendToUser(uid, notification, data) {
   const userSnap = await db.collection('users').doc(uid).get();
   const tokens = userSnap.data()?.fcmTokens ?? [];
   if (tokens.length === 0) return;
 
-  const response = await messaging.sendEachForMulticast({ tokens, notification });
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification,
+    data: data ?? {},
+  });
 
-  // Prune tokens that are no longer valid (uninstalled app, revoked permission, etc.)
   const invalidTokens = response.responses
     .map((r, i) => (r.success ? null : tokens[i]))
     .filter(Boolean);
@@ -25,6 +28,12 @@ async function sendToUser(uid, notification) {
   }
 }
 
+function notificationBodyFor(message, fallbackLabel) {
+  if (message.encrypted) return `🔒 ${fallbackLabel}`;
+  if (message.attachment) return `📎 ${message.attachment.name}`;
+  return message.text;
+}
+
 export const onNewDirectMessage = onDocumentCreated('chats/{chatId}/messages/{messageId}', async (event) => {
   const message = event.data.data();
   const chatSnap = await db.collection('chats').doc(event.params.chatId).get();
@@ -33,10 +42,11 @@ export const onNewDirectMessage = onDocumentCreated('chats/{chatId}/messages/{me
   if (!recipientUid) return;
 
   const senderName = chatSnap.data()?.participantInfo?.[message.senderId]?.displayName ?? 'Someone';
-  await sendToUser(recipientUid, {
-    title: senderName,
-    body: message.attachment ? `📎 ${message.attachment.name}` : message.text,
-  });
+  await sendToUser(
+    recipientUid,
+    { title: senderName, body: notificationBodyFor(message, 'Sent you a message') },
+    { path: `/chat/${event.params.chatId}` }
+  );
 });
 
 export const onNewGroupMessage = onDocumentCreated('groups/{groupId}/messages/{messageId}', async (event) => {
@@ -47,28 +57,29 @@ export const onNewGroupMessage = onDocumentCreated('groups/{groupId}/messages/{m
 
   const senderName = group.memberInfo?.[message.senderId]?.displayName ?? 'Someone';
   const recipients = group.members.filter((uid) => uid !== message.senderId);
+  const body = message.encrypted
+    ? `🔒 ${senderName} sent a message`
+    : `${senderName}: ${notificationBodyFor(message, '')}`;
 
   await Promise.all(
     recipients.map((uid) =>
-      sendToUser(uid, {
-        title: `${group.name}`,
-        body: `${senderName}: ${message.attachment ? `📎 ${message.attachment.name}` : message.text}`,
-      })
+      sendToUser(uid, { title: group.name, body }, { path: `/groups/${event.params.groupId}` })
     )
   );
 });
 
 export const onIncomingCall = onDocumentCreated('calls/{callId}', async (event) => {
   const call = event.data.data();
-  await sendToUser(call.calleeUid, {
-    title: `Incoming ${call.type} call`,
-    body: `${call.callerName} is calling you`,
-  });
+  await sendToUser(
+    call.calleeUid,
+    { title: `Incoming ${call.type} call`, body: `${call.callerName} is calling you` },
+    { path: `/call/${event.params.callId}?role=callee` }
+  );
 });
 
 export const onNewMeetingInvite = onDocumentCreated('meetings/{meetingCode}', async (event) => {
   const meeting = event.data.data();
-  if (!meeting.groupId) return; // only notify for meetings started from a group
+  if (!meeting.groupId) return;
 
   const groupSnap = await db.collection('groups').doc(meeting.groupId).get();
   const group = groupSnap.data();
@@ -79,10 +90,11 @@ export const onNewMeetingInvite = onDocumentCreated('meetings/{meetingCode}', as
 
   await Promise.all(
     recipients.map((uid) =>
-      sendToUser(uid, {
-        title: `${hostName} started a meeting`,
-        body: `${meeting.title} — tap to join`,
-      })
+      sendToUser(
+        uid,
+        { title: `${hostName} started a meeting`, body: `${meeting.title} — tap to join` },
+        { path: `/meeting/${event.params.meetingCode}/lobby` }
+      )
     )
   );
 });

@@ -4,6 +4,7 @@ import {
   setDoc,
   runTransaction,
   serverTimestamp,
+  arrayUnion,
   type Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/firebaseConfig';
@@ -72,7 +73,6 @@ export async function updateProfileFields(
   await setDoc(doc(db, 'users', uid), updates, { merge: true });
 }
 
-/** Publishes this device's E2EE public key so others can encrypt messages to this user. */
 export async function updateUserPublicKey(uid: string, publicKeyJwk: string): Promise<void> {
   await setDoc(doc(db, 'users', uid), { publicKeyJwk }, { merge: true });
 }
@@ -82,6 +82,11 @@ export async function updatePrivacySettings(
   privacy: { showLastSeen: boolean; showOnlineStatus: boolean }
 ): Promise<void> {
   await setDoc(doc(db, 'users', uid), { privacy }, { merge: true });
+}
+
+/** Registers one device's push token — arrayUnion so a user can have multiple devices. */
+export async function addFcmToken(uid: string, token: string): Promise<void> {
+  await setDoc(doc(db, 'users', uid), { fcmTokens: arrayUnion(token) }, { merge: true });
 }
 
 export function timestampToMillis(value: Timestamp | number | undefined): number {

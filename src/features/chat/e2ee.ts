@@ -1,7 +1,7 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import { generateKeyPair, exportPublicKey, importPublicKey, deriveSharedKey, encryptText, decryptText, decryptBytes, toBase64, type EncryptedPayload } from '../../services/cryptoService';
-import { getPrivateKey, savePrivateKey } from '../../services/keyStore';
+import { getPrivateKey, savePrivateKey } from '../../services/secureKeyStore';
 import { updateUserPublicKey } from '../../services/userService';
 
 const sharedKeyCache = new Map<string, CryptoKey>();
@@ -43,11 +43,6 @@ export async function decryptForChat(key: CryptoKey, payload: EncryptedPayload):
   }
 }
 
-/**
- * Downloads an encrypted attachment and decrypts it into a local blob: URL
- * for display/download. Called once per attachment when messages are
- * processed for rendering — see the decryption effects in ChatWindow/GroupChat.
- */
 export async function decryptAttachmentUrl(key: CryptoKey, url: string, iv: string, mimeType: string): Promise<string> {
   const res = await fetch(url);
   const encryptedBuffer = await res.arrayBuffer();

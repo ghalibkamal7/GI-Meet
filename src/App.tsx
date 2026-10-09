@@ -23,6 +23,15 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { SpotPage } from './features/spot/SpotPage';
 import { GlobalSearchPage } from './features/search/GlobalSearchPage';
 import { FileHubPage } from './features/files/FileHubPage';
+import { useBackButton } from './hooks/useBackButton';
+import { useDeepLinks } from './hooks/useDeepLinks';
+
+/** Must live inside BrowserRouter — these hooks need useNavigate/useLocation. */
+function NativeAppBehavior() {
+  useBackButton();
+  useDeepLinks();
+  return null;
+}
 
 export default function App() {
   return (
@@ -30,12 +39,12 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
+            <NativeAppBehavior />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/setup-profile" element={<ProfileSetup />} />
 
-              {/* Full-screen routes (no sidebar/bottom nav) */}
               <Route
                 path="/meeting/:meetingCode/lobby"
                 element={

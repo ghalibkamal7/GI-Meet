@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Brand */
   --color-brand-900: #0b332f;
   --color-brand-700: #12433d;
   --color-brand-600: #17786f;
@@ -9,7 +8,6 @@
   --color-accent: #f2a93b;
   --color-accent-dark: #d88f22;
 
-  /* Light theme surfaces */
   --color-bg: #faf9f6;
   --color-surface: #ffffff;
   --color-surface-alt: #f1efe9;
@@ -19,7 +17,6 @@
   --color-danger: #c4442e;
   --color-success: #2f8f5b;
 
-  /* Type */
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
@@ -30,6 +27,11 @@
 
   --shadow-sm: 0 1px 2px rgba(11, 51, 47, 0.06);
   --shadow-md: 0 8px 24px rgba(11, 51, 47, 0.1);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 
   color-scheme: light;
 }
@@ -62,6 +64,7 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
 }
 
 h1,
@@ -81,7 +84,6 @@ button {
   font-family: inherit;
 }
 
-/* Focus visibility kept intentional and visible everywhere, incl. custom buttons */
 :focus-visible {
   outline: 2px solid var(--color-brand-600);
   outline-offset: 2px;
@@ -130,7 +132,6 @@ button {
   background: var(--color-surface-alt);
 }
 
-/* Square icon-only button — consistent hit target for header/toolbar icons */
 .rb-icon-btn {
   width: 34px;
   height: 34px;
@@ -187,8 +188,6 @@ button {
   font-size: 13px;
 }
 
-/* The "thread" signature motif — a curved line joining two dots, used
-   wherever we mark a connection forming (splash, loading, empty states). */
 .rb-thread-loader {
   width: 64px;
   height: 32px;
@@ -209,15 +208,9 @@ button {
 }
 
 @keyframes rb-thread-draw {
-  0% {
-    stroke-dashoffset: 60;
-  }
-  50% {
-    stroke-dashoffset: 0;
-  }
-  100% {
-    stroke-dashoffset: -60;
-  }
+  0% { stroke-dashoffset: 60; }
+  50% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -60; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -225,4 +218,20 @@ button {
     animation: none;
     stroke-dashoffset: 0;
   }
+}
+
+.rb-native .rb-icon-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.rb-native .rb-btn {
+  padding: 13px 20px;
+  min-height: 44px;
+}
+
+.rb-native input,
+.rb-native textarea,
+.rb-native select {
+  font-size: 16px;
 }
