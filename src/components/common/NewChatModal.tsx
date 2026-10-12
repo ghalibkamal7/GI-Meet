@@ -114,7 +114,10 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
     const timer = window.setTimeout(async () => {
       try {
         const found = await searchUsersByUsername(term, myUid);
-        if (!cancelled) setResults(found.map(toSearchPerson));
+        if (!cancelled) {
+          const people = found.map(toSearchPerson);
+          setResults(removed === null ? people : people.filter((person) => !removed.has(person.uid)));
+        }
       } catch {
         if (!cancelled) setSearchError('Search failed. Please try again.');
       } finally {
@@ -125,7 +128,7 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, myUid]);
+  }, [query, myUid, removed]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
