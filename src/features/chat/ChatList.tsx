@@ -5,10 +5,12 @@ import { db } from '../../firebase/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeToUserChats } from './chatService';
 import type { Chat } from './chatTypes';
+import { neutralizePreview } from './previewText';
 import { NewChatModal } from '../../components/common/NewChatModal';
 import { Plus, Archive, BellOff } from 'lucide-react';
 import { soundService } from '../../services/soundService';
 import { createIncomingMessageDetector } from '../../utils/incomingMessageDetector';
+import { subscribeToRemovedContacts } from '../contacts/contactService';
 
 export function ChatList() {
   const navigate = useNavigate();
@@ -17,12 +19,27 @@ export function ChatList() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [removedContactUids, setRemovedContactUids] = useState<Set<string>>(new Set());
 
   const myUid = profile?.uid;
 
   useEffect(() => {
     if (!myUid) return;
     return subscribeToUserChats(myUid, setChats);
+  }, [myUid]);
+
+  // Keep contacts removed by me out of both chat-list views.
+  // This only filters the UI; it does not delete chats or messages.
+  useEffect(() => {
+    if (!myUid) {
+      setRemovedContactUids(new Set());
+      return;
+    }
+    return subscribeToRemovedContacts(
+      myUid,
+      setRemovedContactUids,
+      (error) => console.error('Could not load removed contacts:', error)
+    );
   }, [myUid]);
 
   // --- Unread counts --------------------------------------------------------------
@@ -65,9 +82,13 @@ export function ChatList() {
 
   if (!profile) return null;
 
-  const visibleChats = chats.filter((c) =>
-    showArchived ? c.archivedBy.includes(profile.uid) : !c.archivedBy.includes(profile.uid)
-  );
+  const visibleChats = chats.filter((c) => {
+    const otherUid = c.participants.find((participantUid) => participantUid !== profile.uid) ?? '';
+    const inSelectedArchive = showArchived
+      ? c.archivedBy.includes(profile.uid)
+      : !c.archivedBy.includes(profile.uid);
+    return inSelectedArchive && !removedContactUids.has(otherUid);
+  });
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -148,7 +169,7 @@ export function ChatList() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {isTyping ? 'typing…' : chat.lastMessage || 'Say hello 👋'}
+                {isTyping ? 'typing…' : neutralizePreview(chat.lastMessage) || 'Say hello 👋'}
               </div>
             </div>
             {unread > 0 && !isMuted && (
