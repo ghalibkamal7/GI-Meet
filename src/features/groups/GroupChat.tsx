@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   subscribeToGroup,
   subscribeToGroupMessages,
   sendGroupMessage,
+  markGroupRead,
   editGroupMessage,
   deleteGroupMessage,
   toggleGroupReaction,
@@ -30,6 +31,7 @@ import { GiAiSummaryButton } from '../gi-ai/GiAiSummaryButton';
 import { summarizeConversation } from '../gi-ai/giAiService';
 import { Phone, Video, BarChart3, Megaphone, Pin, Lock } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { getPendingReadMark } from '../chat/readState';
 
 export function GroupChat() {
   const { groupId } = useParams<{ groupId: string }>();
@@ -134,6 +136,27 @@ export function GroupChat() {
     };
   }, [rawMessages, groupKey, encryptionReady]);
 
+    // --- Read tracking (per member) ---------------------------------------------
+  // Same idea as 1-1 chats, but the read marker lives in group.lastReadAt[myUid] — every member has their own.
+  const myUid = profile?.uid;
+  const [tabVisible, setTabVisible] = useState(() => document.visibilityState === 'visible');
+  const markedReadRef = useRef('');
+
+  useEffect(() => {
+    const onVisibilityChange = () => setTabVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (!groupId || !myUid || !tabVisible || !group) return;
+    const key = getPendingReadMark(groupId, myUid, group, markedReadRef.current);
+    if (!key) return;
+    markedReadRef.current = key;
+    markGroupRead(groupId, myUid).catch(() => {
+      markedReadRef.current = ''; // let the next change retry
+    });
+  }, [groupId, myUid, tabVisible, group]);
   if (loading) return <LoadingSpinner label="Loading group…" />;
   if (!group || !profile || !groupId) return <div style={{ padding: 24 }}>Group not found.</div>;
 

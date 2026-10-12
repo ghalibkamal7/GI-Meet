@@ -10,16 +10,21 @@ service cloud.firestore {
     // --- users/{uid} -----------------------------------------------------
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == uid && request.resource.data.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid && request.resource.data.uid == uid
+              && request.resource.data.username is string
+              && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == request.auth.uid;
       allow update: if isSignedIn() && request.auth.uid == uid
-                    && request.resource.data.uid == uid
-                    && request.resource.data.username == resource.data.username;
+              && request.resource.data.uid == uid
+              && request.resource.data.username == resource.data.username;
       allow delete: if false;
 
       match /callHistory/{entryId} {
         allow read, create: if isSignedIn() && request.auth.uid == uid;
         allow update, delete: if false;
       }
+      match /removedContacts/{contactUid} {
+  allow read, create, update, delete: if isSignedIn() && request.auth.uid == uid && contactUid != uid;
+}
     }
 
     // --- usernames/{username} --------------------------------------------

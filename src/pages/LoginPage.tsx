@@ -104,6 +104,12 @@ export function LoginPage() {
         <p style={{ marginTop: 24, fontSize: 14, textAlign: 'center', color: 'var(--color-text-muted)' }}>
           New here? <Link to="/signup" style={{ color: 'var(--color-brand-600)', fontWeight: 600 }}>Create an account</Link>
         </p>
+        <p style={{ marginTop: 10, fontSize: 13, textAlign: 'center', color: 'var(--color-text-muted)' }}>
+  Need help?{' '}
+  <a href="mailto:ghalibkamal8@gmail.com" style={{ color: 'var(--color-brand-600)', fontWeight: 600 }}>
+    Contact Us
+  </a>
+</p>
       </div>
     </div>
   );

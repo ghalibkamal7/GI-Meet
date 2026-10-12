@@ -1,3 +1,4 @@
+import { RemoveContactMenuItem } from '../../features/contacts/RemoveContactMenuItem';
 import { useState } from 'react';
 import { BellOff, Bell, Archive, ArchiveRestore, Trash2, ShieldOff, Flag } from 'lucide-react';
 import { blockUser, reportUser, toggleMuteChat, toggleArchiveChat, deleteChatForMe } from '../../features/chat/chatService';
@@ -8,6 +9,7 @@ interface Props {
   chatId: string;
   currentUid: string;
   otherUid: string;
+  otherName: string;
   isMuted: boolean;
   isArchived: boolean;
   onClose: () => void;
@@ -17,7 +19,7 @@ interface Props {
 
 const REPORT_REASONS = ['Spam', 'Harassment', 'Inappropriate content', 'Impersonation', 'Other'];
 
-export function ChatOptionsMenu({ chatId, currentUid, otherUid, isMuted, isArchived, onClose, onChatDeleted, onBlocked }: Props) {
+export function ChatOptionsMenu({ chatId, currentUid, otherUid, otherName, isMuted, isArchived, onClose, onChatDeleted, onBlocked }: Props) {
   const { showToast } = useToast();
   const [showReport, setShowReport] = useState(false);
   const [confirming, setConfirming] = useState<'delete' | 'block' | null>(null);
@@ -32,7 +34,6 @@ export function ChatOptionsMenu({ chatId, currentUid, otherUid, isMuted, isArchi
     await deleteChatForMe(chatId, currentUid);
     onChatDeleted();
   }
-
   async function handleBlock() {
     await blockUser(currentUid, otherUid);
     showToast('User blocked.', 'info');
@@ -79,6 +80,13 @@ export function ChatOptionsMenu({ chatId, currentUid, otherUid, isMuted, isArchi
             <button style={rowStyle} onClick={() => setConfirming('delete')}>
               <Trash2 size={15} strokeWidth={1.75} /> Delete chat
             </button>
+            <RemoveContactMenuItem
+              currentUid={currentUid}
+              otherUid={otherUid}
+              otherName={otherName}
+              style={rowStyle}
+              onRemoved={onClose}
+            />
             <button style={{ ...rowStyle, color: 'var(--color-danger)' }} onClick={() => setConfirming('block')}>
               <ShieldOff size={15} strokeWidth={1.75} /> Block user
             </button>

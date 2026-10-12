@@ -38,24 +38,30 @@ export function GroupList() {
     };
   }, [profile]);
 
-  // Chime when a group gets a new message from someone else (skips the very
-  // first load so it doesn't ding for the group's whole existing history).
+  // Play a chime only for a new message sent by another user.
+  // Initial group loading and our own messages must stay silent.
   const lastSeenTimestamps = useRef<Map<string, number>>(new Map());
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
     if (!profile) return;
+
     if (isFirstLoad.current) {
       groups.forEach((g) => lastSeenTimestamps.current.set(g.id, g.lastMessageAt));
       isFirstLoad.current = false;
       return;
     }
+
     groups.forEach((g) => {
-      const prevTimestamp = lastSeenTimestamps.current.get(g.id) ?? 0;
+      const previousTimestamp = lastSeenTimestamps.current.get(g.id);
+      const isNewMessage = previousTimestamp !== undefined && g.lastMessageAt > previousTimestamp;
+      const isFromAnotherUser = !!g.lastMessageSenderId && g.lastMessageSenderId !== profile.uid;
       const isMuted = g.mutedBy.includes(profile.uid);
-      if (g.lastMessageAt > prevTimestamp && !isMuted) {
+
+      if (isNewMessage && isFromAnotherUser && !isMuted) {
         soundService.playMessageChime();
       }
+
       lastSeenTimestamps.current.set(g.id, g.lastMessageAt);
     });
   }, [groups, profile]);

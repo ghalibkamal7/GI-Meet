@@ -11,6 +11,9 @@ export interface Chat {
   archivedBy: string[];
   hiddenFor: string[];
   lastReadAt: Record<string, number>;
+  /** Ciphertext + IV of the newest message, so the chat list can decrypt a preview on this device. Never plaintext. */
+  lastMessageCipher?: string | null;
+  lastMessageIv?: string | null;
 }
 
 export interface Message {

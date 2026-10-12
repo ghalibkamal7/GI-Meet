@@ -1,67 +1,67 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
-import { subscribeToUserChats, getOrCreateDirectChat } from './chatService';
+import { subscribeToUserChats } from './chatService';
 import type { Chat } from './chatTypes';
 import { NewChatModal } from '../../components/common/NewChatModal';
-import type { UserProfile } from '../../utils/types';
 import { Plus, Archive, BellOff } from 'lucide-react';
 import { soundService } from '../../services/soundService';
+import { createIncomingMessageDetector } from '../../utils/incomingMessageDetector';
 
 export function ChatList() {
-  const { profile } = useAuth();
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [chats, setChats] = useState<Chat[]>([]);
   const [showNewChat, setShowNewChat] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
-  useEffect(() => {
-    if (!profile) return;
-    const unsubscribe = subscribeToUserChats(profile.uid, setChats);
-    return unsubscribe;
-  }, [profile]);
-
-  // Lightweight unread count: listen to each chat's recent messages and count
-  // ones newer than this user's lastReadAt. Fine at MVP chat-list scale.
-  // Also chimes for genuinely new incoming messages (skips the initial
-  // snapshot so it doesn't ding for pre-existing unread messages on load).
-  const seenInitialSnapshot = useRef<Set<string>>(new Set());
+  const myUid = profile?.uid;
 
   useEffect(() => {
-    if (!profile) return;
-    const unsubscribers = chats.map((chat) => {
-      const lastRead = chat.lastReadAt[profile.uid] ?? 0;
-      const isMuted = chat.mutedBy.includes(profile.uid);
-      const q = query(collection(db, 'chats', chat.id, 'messages'), where('senderId', '!=', profile.uid));
+    if (!myUid) return;
+    return subscribeToUserChats(myUid, setChats);
+  }, [myUid]);
+
+  // --- Unread counts --------------------------------------------------------------
+  // Re-subscribe ONLY when the set of chats or someone's read marker really changes - not on every chat
+  // document update (typing indicators, last-message changes...). Each listener reads only the messages
+  // NEWER than my read marker, so it stays small. lastReadAt is epoch ms (docToChat converts it).
+  const chatsRef = useRef<Chat[]>([]);
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
+  const unreadKey = myUid ? chats.map((c) => `${c.id}:${c.lastReadAt[myUid] ?? 0}`).join('|') : '';
+
+  useEffect(() => {
+    if (!myUid) return;
+    const unsubscribers = chatsRef.current.map((chat) => {
+      const lastRead = chat.lastReadAt[myUid] ?? 0;
+      const q = query(collection(db, 'chats', chat.id, 'messages'), where('createdAt', '>', Timestamp.fromMillis(lastRead)));
       return onSnapshot(q, (snap) => {
-        const count = snap.docs.filter((d) => (d.data().createdAt?.toMillis?.() ?? 0) > lastRead).length;
-        setUnreadCounts((prev) => ({ ...prev, [chat.id]: count }));
-
-        if (seenInitialSnapshot.current.has(chat.id)) {
-          const hasNewMessage = snap.docChanges().some((change) => change.type === 'added');
-          if (hasNewMessage && !isMuted) soundService.playMessageChime();
-        } else {
-          seenInitialSnapshot.current.add(chat.id);
-        }
+        const count = snap.docs.filter((d) => d.data().senderId !== myUid).length;
+        setUnreadCounts((prev) => (prev[chat.id] === count ? prev : { ...prev, [chat.id]: count }));
       });
     });
-    return () => unsubscribers.forEach((u) => u());
-  }, [chats, profile]);
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [myUid, unreadKey]);
 
-  async function handleSelectUser(user: UserProfile) {
-    if (!profile) return;
-    const chatId = await getOrCreateDirectChat(
-      profile.uid,
-      { displayName: profile.displayName, photoURL: profile.photoURL },
-      user.uid,
-      { displayName: user.displayName, photoURL: user.photoURL }
-    );
-    setShowNewChat(false);
-    navigate(`/chat/${chatId}`);
-  }
+  // --- Incoming-message chime -----------------------------------------------------
+  // Driven by the chat documents (lastMessageAt / lastMessageSenderId), not by per-chat message listeners:
+  // the first snapshot, my own messages, muted chats, typing/presence updates and re-subscriptions are all silent.
+  const detectIncomingRef = useRef<ReturnType<typeof createIncomingMessageDetector> | null>(null);
+  useEffect(() => {
+    detectIncomingRef.current = myUid ? createIncomingMessageDetector(myUid) : null;
+  }, [myUid]);
+
+  useEffect(() => {
+    if (!myUid || !detectIncomingRef.current) return;
+    const audibleChats = chats.filter((c) => !c.mutedBy.includes(myUid));
+    if (detectIncomingRef.current(audibleChats)) soundService.playMessageChime();
+  }, [chats, myUid]);
+
 
   if (!profile) return null;
 
@@ -176,9 +176,7 @@ export function ChatList() {
 
       {showNewChat && (
         <NewChatModal
-          currentUid={profile.uid}
           onClose={() => setShowNewChat(false)}
-          onSelectUser={handleSelectUser}
         />
       )}
     </div>

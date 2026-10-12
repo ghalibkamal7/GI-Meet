@@ -1,23 +1,42 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { createUserProfile, isUsernameTaken } from '../../services/userService';
+import { createUserProfile, getUsernameOwner } from '../../services/userService';
 import { isValidUsername, normalizeUsername } from '../../utils/validators';
+import { classifyError } from '../../services/profileState';
 import { ensureDeviceKeys } from '../chat/e2ee';
 import { consumeRedirectTarget } from '../../utils/redirectAfterLogin';
+import { LoadingSpinner } from '../../components/common/LoadingSpinner';
+import { ProfileLoadErrorScreen } from '../../components/common/ProfileLoadErrorScreen';
+
+function describeSetupError(error: unknown): string {
+  if (error instanceof Error && error.message === 'username-taken') {
+    return 'That username was just taken. Try another one.';
+  }
+  const failure = classifyError(error);
+  if (failure.kind === 'permission') {
+    return `Your profile could not be saved because the database rejected the request (${failure.code}). This is a configuration problem, not something you did wrong.`;
+  }
+  if (failure.kind === 'network') {
+    return 'Could not reach the server. Check your connection and try again.';
+  }
+  return `Something went wrong creating your profile (${failure.code}). Please try again.`;
+}
 
 export function ProfileSetup() {
-  const { firebaseUser, refreshProfile } = useAuth();
+  const { firebaseUser, loading, needsProfileSetup, profileError, retryProfileLoad, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (!firebaseUser) {
-    navigate('/login');
-    return null;
-  }
+  // All hooks are declared above; the guards below only decide WHAT to render.
+  if (loading) return <LoadingSpinner label="Getting things ready…" />;
+  if (!firebaseUser) return <Navigate to="/login" replace />;
+  if (profileError) return <ProfileLoadErrorScreen error={profileError} onRetry={retryProfileLoad} />;
+  // A signed-in user who already has a profile must never see this form, however they got here.
+  if (!needsProfileSetup) return <Navigate to="/" replace />;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -32,10 +51,11 @@ export function ProfileSetup() {
     setSubmitting(true);
     try {
       const normalized = normalizeUsername(username);
-      const taken = await isUsernameTaken(normalized);
-      if (taken) {
+
+      // "Taken" means owned by SOMEONE ELSE — a reservation left behind by this same account is fine to reuse.
+      const owner = await getUsernameOwner(normalized);
+      if (owner && owner !== firebaseUser!.uid) {
         setError('That username is already taken. Try another one.');
-        setSubmitting(false);
         return;
       }
 
@@ -51,17 +71,14 @@ export function ProfileSetup() {
       try {
         await ensureDeviceKeys(firebaseUser!.uid);
       } catch {
-        // Non-fatal — chats will fall back to plaintext until a key exists.
+        // Non-fatal — chats fall back to plaintext until a key exists.
       }
 
+      // Re-reads users/{uid}; only after it is CONFIRMED does needsProfileSetup become false.
       await refreshProfile();
-      navigate(consumeRedirectTarget() ?? '/');
-    } catch (err) {
-      if (err instanceof Error && err.message === 'username-taken') {
-        setError('That username was just taken. Try another one.');
-      } else {
-        setError('Something went wrong creating your profile. Please try again.');
-      }
+      navigate(consumeRedirectTarget() ?? '/', { replace: true });
+    } catch (caught) {
+      setError(describeSetupError(caught));
     } finally {
       setSubmitting(false);
     }
@@ -71,9 +88,7 @@ export function ProfileSetup() {
     <div style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div className="rb-card" style={{ width: '100%', maxWidth: 420, padding: 32 }}>
         <h1 style={{ fontSize: 24, marginBottom: 4 }}>Set up your profile</h1>
-        <p style={{ color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 24 }}>
-          Pick a username people can find you by.
-        </p>
+        <p style={{ color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 24 }}>Pick a username people can find you by.</p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
@@ -97,7 +112,11 @@ export function ProfileSetup() {
             rows={3}
             maxLength={160}
           />
-          {error && <p className="rb-error-text">{error}</p>}
+          {error && (
+            <p className="rb-error-text" role="alert">
+              {error}
+            </p>
+          )}
           <button className="rb-btn rb-btn--primary" type="submit" disabled={submitting}>
             {submitting ? 'Saving…' : 'Continue'}
           </button>

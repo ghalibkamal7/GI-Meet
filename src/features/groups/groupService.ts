@@ -21,6 +21,8 @@ import {
 import { db } from '../../firebase/firebaseConfig';
 import type { Group, Announcement } from './groupTypes';
 import type { Message } from '../chat/chatTypes';
+import { toMillis, timestampMapToMillis } from '../chat/readState';
+import { ENCRYPTED_PREVIEW_FALLBACK } from '../chat/previewText';
 
 function generateInviteCode(): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -85,7 +87,8 @@ export async function getGroupByInviteCode(inviteCode: string): Promise<Group | 
 }
 
 function docToGroup(d: QueryDocumentSnapshot<DocumentData>): Group {
-  const data = d.data();
+  // 'estimate': a pending serverTimestamp() reads as local time instead of null.
+  const data = d.data({ serverTimestamps: 'estimate' });
   return {
     id: d.id,
     name: data.name,
@@ -98,7 +101,9 @@ function docToGroup(d: QueryDocumentSnapshot<DocumentData>): Group {
     createdBy: data.createdBy,
     createdAt: data.createdAt?.toMillis?.() ?? 0,
     lastMessage: data.lastMessage ?? '',
-    lastMessageAt: data.lastMessageAt?.toMillis?.() ?? 0,
+    lastMessageAt: toMillis(data.lastMessageAt),
+    lastMessageSenderId: data.lastMessageSenderId ?? '',
+    lastReadAt: timestampMapToMillis(data.lastReadAt),
     inviteCode: data.inviteCode ?? '',
     mutedBy: data.mutedBy ?? [],
     pinnedMessageIds: data.pinnedMessageIds ?? [],
@@ -226,10 +231,9 @@ export async function sendGroupMessage(params: {
   const trimmed = params.text.trim();
   if (!trimmed && !params.attachment) return;
 
-  await addDoc(collection(db, 'groups', params.groupId, 'messages'), {
-    chatId: params.groupId,
-    senderId: params.senderId,
-    text: trimmed,
+  await updateDoc(doc(db, 'groups', params.groupId), {
+    lastMessage: params.attachment ? `📎 ${params.attachment.name}` : params.encrypted ? ENCRYPTED_PREVIEW_FALLBACK : trimmed,
+    lastMessageSenderId: params.senderId,
     encrypted: Boolean(params.encrypted),
     iv: params.iv ?? null,
     createdAt: serverTimestamp(),
@@ -285,4 +289,8 @@ export async function toggleGroupPin(groupId: string, messageId: string, already
   await updateDoc(doc(db, 'groups', groupId), {
     pinnedMessageIds: already ? arrayRemove(messageId) : arrayUnion(messageId),
   });
+}
+/** Marks the group as read for ONE member (every member has their own entry in lastReadAt). */
+export async function markGroupRead(groupId: string, uid: string): Promise<void> {
+  await updateDoc(doc(db, 'groups', groupId), { [`lastReadAt.${uid}`]: serverTimestamp() });
 }

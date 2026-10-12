@@ -15,7 +15,9 @@ export interface Group {
   mutedBy: string[];
   pinnedMessageIds: string[];
   isRoom: boolean; // Rooms = a Group with extra tabs (Files/Notes/Polls/Schedule) enabled
-  communityId: string | null; // set when this group is a sub-group inside a Community
+  communityId: string | null;
+  lastMessageSenderId?: string;
+  lastReadAt?: Record<string, number>; // set when this group is a sub-group inside a Community
 }
 
 export interface Announcement {

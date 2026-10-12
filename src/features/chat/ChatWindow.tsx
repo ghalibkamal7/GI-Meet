@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import {
   subscribeToMessages,
+  subscribeToChat,
   sendMessage,
   deleteMessage,
   editMessage,
@@ -32,6 +33,7 @@ import { PollCard, CreatePollModal } from '../polls/PollComponents';
 import { GiAiSummaryButton } from '../gi-ai/GiAiSummaryButton';
 import { summarizeConversation } from '../gi-ai/giAiService';
 import { useToast } from '../../context/ToastContext';
+import { getPendingReadMark, type ReadMeta } from './readState';
 
 export function ChatWindow() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -151,9 +153,38 @@ export function ChatWindow() {
     };
   }, [rawMessages, sharedKey, encryptionReady]);
 
+  // --- Read tracking ----------------------------------------------------------
+  // Mark the chat as read only while it is really on screen (tab visible), and only when a message
+  // newer than MY read marker exists. The live listener means a message that arrives while the chat
+  // is open is marked read AFTER we saw it, so my marker is always newer than the sender's lastMessageAt.
+  const myUid = profile?.uid;
+  const [readMeta, setReadMeta] = useState<ReadMeta | null>(null);
+  const [tabVisible, setTabVisible] = useState(() => document.visibilityState === 'visible');
+  const markedReadRef = useRef('');
+
   useEffect(() => {
-    if (chatId && profile) markChatRead(chatId, profile.uid);
-  }, [chatId, profile, messages.length]);
+    const onVisibilityChange = () => setTabVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (!chatId) return;
+    setReadMeta(null);
+    return subscribeToChat(chatId, (c) =>
+      setReadMeta(c ? { lastMessageAt: c.lastMessageAt, lastMessageSenderId: c.lastMessageSenderId, lastReadAt: c.lastReadAt } : null)
+    );
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!chatId || !myUid || !tabVisible) return;
+    const key = getPendingReadMark(chatId, myUid, readMeta, markedReadRef.current);
+    if (!key) return;
+    markedReadRef.current = key;
+    markChatRead(chatId, myUid).catch(() => {
+      markedReadRef.current = ''; // let the next change retry
+    });
+  }, [chatId, myUid, tabVisible, readMeta]);
 
   useEffect(() => {
     if (!chat || !profile) return;
@@ -422,6 +453,7 @@ export function ChatWindow() {
           chatId={chatId}
           currentUid={profile.uid}
           otherUid={otherUid}
+          otherName={otherInfo?.displayName ?? "Unknown user"}
           isMuted={isMuted}
           isArchived={isArchived}
           onClose={() => setShowOptions(false)}

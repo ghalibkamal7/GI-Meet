@@ -5,11 +5,13 @@ import {
   runTransaction,
   serverTimestamp,
   arrayUnion,
+  type DocumentReference,
   type Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/firebaseConfig';
 import type { UserProfile } from '../utils/types';
 import { normalizeUsername } from '../utils/validators';
+import { createProfileInTransaction } from './profileTransaction';
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, 'users', uid));
@@ -17,9 +19,22 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return snap.data() as UserProfile;
 }
 
-export async function isUsernameTaken(username: string): Promise<boolean> {
+/** Raw existence + data of users/{uid}. Throws on permission/network errors (so callers can tell "missing" from "failed"). */
+export async function fetchUserProfileDoc(uid: string): Promise<{ exists: boolean; data: unknown }> {
+  const snap = await getDoc(doc(db, 'users', uid));
+  return { exists: snap.exists(), data: snap.data() };
+}
+
+/** Who owns this username? null = free. A malformed reservation counts as owned by someone else. */
+export async function getUsernameOwner(username: string): Promise<string | null> {
   const snap = await getDoc(doc(db, 'usernames', normalizeUsername(username)));
-  return snap.exists();
+  if (!snap.exists()) return null;
+  const owner = snap.data()?.uid;
+  return typeof owner === 'string' ? owner : 'unknown';
+}
+
+export async function isUsernameTaken(username: string): Promise<boolean> {
+  return (await getUsernameOwner(username)) !== null;
 }
 
 export async function createUserProfile(params: {
@@ -34,36 +49,36 @@ export async function createUserProfile(params: {
   const userRef = doc(db, 'users', params.uid);
   const usernameRef = doc(db, 'usernames', username);
 
-  await runTransaction(db, async (tx) => {
-    const usernameSnap = await tx.get(usernameRef);
-    if (usernameSnap.exists()) {
-      throw new Error('username-taken');
-    }
-
-    tx.set(usernameRef, { uid: params.uid });
-    tx.set(userRef, {
-      uid: params.uid,
-      displayName: params.displayName,
-      username,
-      email: params.email,
-      photoURL: params.photoURL ?? null,
-      createdAt: serverTimestamp(),
-      lastSeen: serverTimestamp(),
-      isOnline: true,
-      bio: params.bio?.trim() ?? '',
-    });
-  });
+  await runTransaction(db, (tx) =>
+    createProfileInTransaction<DocumentReference>(
+      {
+        get: async (ref) => {
+          const snap = await tx.get(ref);
+          return { exists: snap.exists(), data: snap.data() };
+        },
+        set: (ref, data) => {
+          tx.set(ref, data);
+        },
+      },
+      { usernameRef, userRef },
+      {
+        uid: params.uid,
+        email: params.email,
+        displayName: params.displayName,
+        username,
+        photoURL: params.photoURL ?? null,
+        bio: params.bio?.trim() ?? '',
+      },
+      () => serverTimestamp()
+    )
+  );
 
   const created = await getDoc(userRef);
   return created.data() as UserProfile;
 }
 
 export async function updateOnlineStatus(uid: string, isOnline: boolean): Promise<void> {
-  await setDoc(
-    doc(db, 'users', uid),
-    { isOnline, lastSeen: serverTimestamp() },
-    { merge: true }
-  );
+  await setDoc(doc(db, 'users', uid), { isOnline, lastSeen: serverTimestamp() }, { merge: true });
 }
 
 export async function updateProfileFields(
@@ -73,6 +88,7 @@ export async function updateProfileFields(
   await setDoc(doc(db, 'users', uid), updates, { merge: true });
 }
 
+/** Publishes this device's E2EE public key so others can encrypt messages to this user. */
 export async function updateUserPublicKey(uid: string, publicKeyJwk: string): Promise<void> {
   await setDoc(doc(db, 'users', uid), { publicKeyJwk }, { merge: true });
 }

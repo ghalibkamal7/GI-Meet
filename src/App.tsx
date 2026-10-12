@@ -20,6 +20,7 @@ import { MeetingRoom } from './features/meetings/MeetingRoom';
 import { CallScreen } from './features/calls/CallScreen';
 import { CallHistoryPage } from './features/history/CallHistoryPage';
 import { SettingsPage } from './features/settings/SettingsPage';
+import { PrivacyPage } from './features/settings/PrivacyPage';
 import { SpotPage } from './features/spot/SpotPage';
 import { GlobalSearchPage } from './features/search/GlobalSearchPage';
 import { FileHubPage } from './features/files/FileHubPage';
@@ -104,6 +105,7 @@ export default function App() {
                 <Route path="/search" element={<GlobalSearchPage />} />
                 <Route path="/files/:scope/:id" element={<FileHubPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings/privacy" element={<PrivacyPage />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

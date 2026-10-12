@@ -1,94 +1,151 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { User } from 'firebase/auth';
-import { subscribeToAuthChanges, logOut as firebaseLogOut } from '../firebase/auth';
-import { getUserProfile, updateOnlineStatus } from '../services/userService';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { auth } from '../firebase/firebaseConfig';
 import type { UserProfile } from '../utils/types';
-import { soundService } from '../services/soundService';
+import { fetchUserProfileDoc, updateOnlineStatus } from '../services/userService';
+import {
+  deriveAuthView,
+  loadProfileState,
+  type ProfileLoadError,
+  type ProfileLoadResult,
+  type ProfileStatus,
+} from '../services/profileState';
 
 interface AuthContextValue {
   firebaseUser: User | null;
+  /** Only ever a CONFIRMED, valid profile. null while loading, missing, or if the read failed. */
   profile: UserProfile | null;
+  /** True until we know who the user is AND whether their profile exists. Never redirect while this is true. */
   loading: boolean;
-  /** True once we know the user is authed but has no Firestore profile yet (needs onboarding) */
+  /** True only when the profile was confirmed missing/incomplete. Never true while loading or after a read failure. */
   needsProfileSetup: boolean;
+  /** Set when reading the profile failed (permissions / network). Show an error with Retry — do NOT treat as a new user. */
+  profileError: ProfileLoadError | null;
+  /** Re-reads the profile. Silent (no spinner, keeps the current profile on failure) when a profile is already loaded. */
   refreshProfile: () => Promise<void>;
+  retryProfileLoad: () => Promise<void>;
   logOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+interface ProfileState {
+  status: ProfileStatus;
+  profile: UserProfile | null;
+  error: ProfileLoadError | null;
+}
+
+const INITIAL_PROFILE_STATE: ProfileState = { status: 'idle', profile: null, error: null };
+
+function stateFromResult(result: ProfileLoadResult): ProfileState {
+  switch (result.status) {
+    case 'ready':
+      return { status: 'ready', profile: result.profile, error: null };
+    case 'error':
+      return { status: 'error', profile: null, error: result.error };
+    default:
+      return { status: result.status, profile: null, error: null }; // 'missing' | 'incomplete'
+  }
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [authResolved, setAuthResolved] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [profileState, setProfileState] = useState<ProfileState>(INITIAL_PROFILE_STATE);
 
-  async function loadProfile(uid: string) {
-    const userProfile = await getUserProfile(uid);
-    setProfile(userProfile);
-  }
-
+  // Every load gets a number; if the user changes (or another load starts) while one is in flight,
+  // the stale result is dropped instead of overwriting newer state.
+  const loadSequence = useRef(0);
+  const statusRef = useRef<ProfileStatus>('idle');
   useEffect(() => {
-    const unsubscribe = subscribeToAuthChanges(async (user) => {
-      setFirebaseUser(user);
+    statusRef.current = profileState.status;
+  }, [profileState.status]);
 
-      if (user) {
-        await loadProfile(user.uid);
-        // Best-effort — don't block UI or crash the auth flow if this fails.
-        updateOnlineStatus(user.uid, true).catch(() => undefined);
-      } else {
-        setProfile(null);
-      }
+  const loadProfile = useCallback(async (uid: string, silent: boolean) => {
+    const sequence = ++loadSequence.current;
+    if (!silent) setProfileState({ status: 'loading', profile: null, error: null });
 
-      setLoading(false);
-    });
+    const result = await loadProfileState(uid, fetchUserProfileDoc);
+    if (sequence !== loadSequence.current) return;
 
-    return () => unsubscribe();
+    if (result.status === 'error') console.warn('[auth] could not load profile:', result.error.code); // code only, no user data
+    if (silent && result.status === 'error') return; // a failed background refresh must not kick a signed-in user out
+    setProfileState(stateFromResult(result));
   }, []);
 
-  // Mark the user offline when they close the tab. Not fully reliable
-  // (browsers can kill tabs without firing this) — a presence system with
-  // Realtime Database or a Cloud Function heartbeat is the more robust
-  // approach, planned for a later phase.
   useEffect(() => {
-    function handleBeforeUnload() {
-      if (firebaseUser) {
-        updateOnlineStatus(firebaseUser.uid, false).catch(() => undefined);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      loadSequence.current += 1; // anything still loading for the previous user is now stale
+      setFirebaseUser(user);
+      if (!user) {
+        setProfileState(INITIAL_PROFILE_STATE);
+        setAuthResolved(true);
+        return;
       }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [firebaseUser]);
+      // Same batch as setFirebaseUser: there is never a render with a user but no "loading" profile state.
+      setProfileState({ status: 'loading', profile: null, error: null });
+      setAuthResolved(true);
+      void loadProfile(user.uid, false);
+    });
+    return unsubscribe;
+  }, [loadProfile]);
 
-  async function refreshProfile() {
-    if (firebaseUser) {
-      await loadProfile(firebaseUser.uid);
-    }
-  }
+  // PRESENCE — only once the profile is confirmed to exist (a merge-write before that could create a half-empty
+  // users/{uid} document). If your previous AuthContext handled presence differently, keep your version here.
+  const readyUid = firebaseUser && profileState.status === 'ready' ? firebaseUser.uid : null;
+  useEffect(() => {
+    if (!readyUid) return;
+    const setPresence = (online: boolean) => {
+      updateOnlineStatus(readyUid, online).catch(() => undefined);
+    };
+    setPresence(true);
+    const onPageHide = () => setPresence(false);
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, [readyUid]);
 
-  async function logOut() {
-    soundService.stopAll();
-    if (firebaseUser) {
-      await updateOnlineStatus(firebaseUser.uid, false).catch(() => undefined);
-    }
-    await firebaseLogOut();
-  }
+  const refreshProfile = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    await loadProfile(uid, statusRef.current === 'ready');
+  }, [loadProfile]);
 
-  const value: AuthContextValue = {
-    firebaseUser,
-    profile,
-    loading,
-    needsProfileSetup: Boolean(firebaseUser) && !profile && !loading,
-    refreshProfile,
-    logOut,
-  };
+  const retryProfileLoad = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    await loadProfile(uid, false);
+  }, [loadProfile]);
+
+  const logOut = useCallback(async () => {
+    await signOut(auth);
+  }, []);
+
+  const view = deriveAuthView({
+    authResolved,
+    hasUser: firebaseUser !== null,
+    status: profileState.status,
+    error: profileState.error,
+  });
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      firebaseUser,
+      profile: firebaseUser && profileState.status === 'ready' ? profileState.profile : null,
+      loading: view.loading,
+      needsProfileSetup: view.needsProfileSetup,
+      profileError: view.profileError,
+      refreshProfile,
+      retryProfileLoad,
+      logOut,
+    }),
+    [firebaseUser, profileState, view.loading, view.needsProfileSetup, view.profileError, refreshProfile, retryProfileLoad, logOut]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return ctx;
+  const value = useContext(AuthContext);
+  if (!value) throw new Error('useAuth must be used inside <AuthProvider>');
+  return value;
 }

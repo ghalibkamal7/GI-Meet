@@ -21,8 +21,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import type { Chat, Message } from './chatTypes';
+import { toMillis, timestampMapToMillis } from './readState';
+import { ENCRYPTED_PREVIEW_FALLBACK } from './previewText';
 
 const MESSAGES_PAGE_SIZE = 30;
+
+// Longest ciphertext kept on the chat document for list previews.
+const MAX_PREVIEW_CIPHERTEXT_CHARS = 4096;
 
 export function directChatId(uidA: string, uidB: string): string {
   return [uidA, uidB].sort().join('_');
@@ -75,21 +80,32 @@ export function subscribeToUserChats(uid: string, callback: (chats: Chat[]) => v
   });
 }
 
+/** Live view of ONE chat document (read markers, last message, ...). */
+export function subscribeToChat(chatId: string, callback: (chat: Chat | null) => void): () => void {
+  return onSnapshot(doc(db, 'chats', chatId), (snap) => {
+    callback(snap.exists() ? docToChat(snap as QueryDocumentSnapshot<DocumentData>) : null);
+  });
+}
+
 function docToChat(d: QueryDocumentSnapshot<DocumentData>): Chat {
-  const data = d.data();
+  // 'estimate': a serverTimestamp() that is still being written reads as the local time
+  // instead of null, so a pending write can never flip a value back to "missing" (unread flicker).
+  const data = d.data({ serverTimestamps: 'estimate' });
   return {
     id: d.id,
     participants: data.participants ?? [],
     participantInfo: data.participantInfo ?? {},
     lastMessage: data.lastMessage ?? '',
-    lastMessageAt: data.lastMessageAt?.toMillis?.() ?? 0,
+   lastMessageAt: toMillis(data.lastMessageAt),
     lastMessageSenderId: data.lastMessageSenderId ?? '',
     typing: data.typing ?? {},
     pinnedMessageIds: data.pinnedMessageIds ?? [],
     mutedBy: data.mutedBy ?? [],
     archivedBy: data.archivedBy ?? [],
     hiddenFor: data.hiddenFor ?? [],
-    lastReadAt: data.lastReadAt ?? {},
+    lastReadAt: timestampMapToMillis(data.lastReadAt),
+    lastMessageCipher: data.lastMessageCipher ?? null,
+    lastMessageIv: data.lastMessageIv ?? null,
   };
 }
 
@@ -171,8 +187,15 @@ export async function sendMessage(params: {
     iv: params.iv ?? null,
   });
 
+  // Keep the newest message's CIPHERTEXT on the chat doc so the chat list can decrypt a preview on-device.
+  const keepCipherPreview = Boolean(
+    params.encrypted && params.iv && !params.attachment && trimmed.length <= MAX_PREVIEW_CIPHERTEXT_CHARS
+  );
+
   await updateDoc(doc(db, 'chats', params.chatId), {
-    lastMessage: params.attachment ? `📎 ${params.attachment.name}` : params.encrypted ? '🔒 Encrypted message' : trimmed,
+    lastMessage: params.attachment ? `📎 ${params.attachment.name}` : params.encrypted ? ENCRYPTED_PREVIEW_FALLBACK : trimmed,
+    lastMessageCipher: keepCipherPreview ? trimmed : null,
+    lastMessageIv: keepCipherPreview ? params.iv ?? null : null,
     lastMessageAt: serverTimestamp(),
     lastMessageSenderId: params.senderId,
     hiddenFor: [],

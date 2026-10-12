@@ -5,6 +5,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { updateProfileFields, updatePrivacySettings } from '../../services/userService';
 import { requestNotificationPermission } from '../notifications/notificationService';
 import { appConfig } from '../../config/appConfig';
+import { PrivacySettingsLink } from './PrivacySettingsLink';
+import { ProfilePhotoEditor } from './ProfilePhotoEditor';
 
 type Tab = 'account' | 'privacy' | 'notifications' | 'appearance' | 'security';
 
@@ -86,6 +88,9 @@ export function SettingsPage() {
         {tab === 'account' && (
           <>
             <h2 style={{ fontSize: 18, marginBottom: 16 }}>Account</h2>
+            <div style={{ marginBottom: 20 }}>
+              <ProfilePhotoEditor />
+            </div>
             <label style={fieldLabel}>Display name</label>
             <input className="rb-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={{ marginBottom: 14 }} />
             <label style={fieldLabel}>Username</label>
@@ -101,6 +106,9 @@ export function SettingsPage() {
         {tab === 'privacy' && (
           <>
             <h2 style={{ fontSize: 18, marginBottom: 16 }}>Privacy</h2>
+            <div style={{ marginBottom: 20 }}>
+              <PrivacySettingsLink />
+            </div>
             <label style={toggleRow}>
               <input type="checkbox" checked={showLastSeen} onChange={(e) => setShowLastSeen(e.target.checked)} />
               Show my last seen time to others
