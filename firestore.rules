@@ -36,7 +36,13 @@ service cloud.firestore {
 
     // --- chats/{chatId} — 1-1 chat, only the two participants ------------
     match /chats/{chatId} {
-      allow read, update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      // Authenticated users may check whether a deterministic chat ID exists.
+      // Existing chat contents remain readable only to participants.
+      allow get: if isSignedIn()
+                 && (!exists(/databases/$(database)/documents/chats/$(chatId))
+                     || request.auth.uid in resource.data.participants);
+      allow list, update: if isSignedIn()
+                          && request.auth.uid in resource.data.participants;
       allow create: if isSignedIn()
                     && request.auth.uid in request.resource.data.participants
                     && request.resource.data.participants.size() == 2;

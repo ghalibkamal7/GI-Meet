@@ -5,6 +5,7 @@ import { db } from '../../firebase/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import { subscribeToUserChats } from './chatService';
 import type { Chat } from './chatTypes';
+import { ChatPreviewText } from './ChatPreviewText';
 import { neutralizePreview } from './previewText';
 import { NewChatModal } from '../../components/common/NewChatModal';
 import { Plus, Archive, BellOff } from 'lucide-react';
@@ -169,7 +170,7 @@ export function ChatList() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {isTyping ? 'typing…' : neutralizePreview(chat.lastMessage) || 'Say hello 👋'}
+                {isTyping ? 'typing…' : chat.lastMessageCipher ? <ChatPreviewText chat={chat} /> : neutralizePreview(chat.lastMessage) || 'Say hello 👋'}
               </div>
             </div>
             {unread > 0 && !isMuted && (
