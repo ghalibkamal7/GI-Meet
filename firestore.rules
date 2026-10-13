@@ -22,8 +22,12 @@ service cloud.firestore {
         allow read, create: if isSignedIn() && request.auth.uid == uid;
         allow update, delete: if false;
       }
+
       match /removedContacts/{contactUid} {
-  allow read, create, update, delete: if isSignedIn() && request.auth.uid == uid && contactUid != uid;
+       allow read: if isSignedIn() && request.auth.uid == uid;
+       allow create, update, delete: if isSignedIn()
+                                && request.auth.uid == uid
+                                && contactUid != uid;
 }
     }
 
@@ -32,6 +36,45 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    // --- contactRequests/{requestId} --------------------------------------
+    match /contactRequests/{requestId} {
+      function isRequestMember() {
+        return isSignedIn() && request.auth.uid in resource.data.members;
+      }
+
+      allow read: if isRequestMember();
+
+      // Only the requester can create a pending request with a deterministic ID.
+      allow create: if isSignedIn()
+                    && request.resource.data.requesterUid == request.auth.uid
+                    && request.resource.data.recipientUid is string
+                    && request.resource.data.recipientUid != request.auth.uid
+                    && request.resource.data.members is list
+                    && request.resource.data.members.size() == 2
+                    && request.auth.uid in request.resource.data.members
+                    && request.resource.data.recipientUid in request.resource.data.members
+                    && request.resource.data.status == 'pending'
+                    && requestId == (request.auth.uid < request.resource.data.recipientUid
+                        ? request.auth.uid + '__' + request.resource.data.recipientUid
+                        : request.resource.data.recipientUid + '__' + request.auth.uid);
+
+      // Only the recipient can accept a pending request.
+      allow update: if isRequestMember()
+                    && resource.data.status == 'pending'
+                    && resource.data.recipientUid == request.auth.uid
+                    && request.resource.data.status == 'accepted'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt'])
+                    && request.resource.data.members == resource.data.members
+                    && request.resource.data.requesterUid == resource.data.requesterUid
+                    && request.resource.data.recipientUid == resource.data.recipientUid;
+
+      // A recipient may reject a pending request; either member may remove an accepted contact.
+      allow delete: if isRequestMember()
+                    && ((resource.data.status == 'pending'
+                         && resource.data.recipientUid == request.auth.uid)
+                        || resource.data.status == 'accepted');
     }
 
     // --- chats/{chatId} — 1-1 chat, only the two participants ------------

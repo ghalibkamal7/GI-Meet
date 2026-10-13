@@ -3,6 +3,7 @@ import { UserMinus } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { removeContact } from './contactService';
+import { removeAcceptedContact } from './contactRequestService';
 
 /**
  * "Remove contact" for the chat options menu. It is its own action: it does NOT delete the chat, does NOT block,
@@ -30,7 +31,8 @@ export function RemoveContactMenuItem({
   async function handleConfirm() {
     setConfirming(false);
     try {
-      await removeContact(currentUid, otherUid);
+      await removeAcceptedContact(currentUid, otherUid);
+await removeContact(currentUid, otherUid);
       showToast(`${otherName} was removed from your contacts. Your chat history was not deleted.`, 'success');
       onRemoved?.();
     } catch {
@@ -53,7 +55,7 @@ export function RemoveContactMenuItem({
       {confirming && (
         <ConfirmDialog
           title="Remove contact?"
-          message={`${otherName} will be removed from your contacts. Your chat and message history stay exactly as they are, and their account and contacts are not affected. You can message them again any time by searching their username.`}
+          message={`${otherName} will be removed from your contacts. Your chat and message history will remain intact. To become contacts again, a new contact request must be accepted.`}
           confirmLabel="Remove contact"
           danger
           onConfirm={handleConfirm}

@@ -6,14 +6,18 @@ import { useToast } from '../../context/ToastContext';
 import { searchUsersByUsername } from '../../services/searchService';
 import { getOrCreateDirectChat } from '../../features/chat/chatService';
 import {
+  sendContactRequest,
+  removeAcceptedContact,
+  subscribeToMyContactRequests,
+  type ContactRequest,
+} from '../../features/contacts/contactRequestService';
+import {
   removeContact,
-  restoreContact,
   subscribeToContactChats,
   subscribeToRemovedContacts,
 } from '../../features/contacts/contactService';
 import {
   buildVisibleLists,
-  deriveContacts,
   type Contact,
   type ContactChatDoc,
   type SearchPerson,
@@ -63,6 +67,7 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
 
   const [chats, setChats] = useState<ContactChatDoc[] | null>(null);
   const [removed, setRemoved] = useState<Set<string> | null>(null);
+  const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [removedUnavailable, setRemovedUnavailable] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -116,7 +121,7 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
         const found = await searchUsersByUsername(term, myUid);
         if (!cancelled) {
           const people = found.map(toSearchPerson);
-          setResults(removed === null ? people : people.filter((person) => !removed.has(person.uid)));
+          setResults(people);
         }
       } catch {
         if (!cancelled) setSearchError('Search failed. Please try again.');
@@ -131,6 +136,22 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
   }, [query, myUid, removed]);
 
   useEffect(() => {
+  if (!myUid) {
+    setContactRequests([]);
+    return;
+  }
+
+  return subscribeToMyContactRequests(
+    myUid,
+    setContactRequests,
+    (error) => {
+      console.error('Could not load contact requests:', error);
+      setActionError('Could not load contact requests. Please try again.');
+    }
+  );
+}, [myUid]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !pendingRemoval) onClose();
     };
@@ -138,8 +159,34 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose, pendingRemoval]);
 
-  const contacts = useMemo(() => (myUid && chats && removed ? deriveContacts(chats, removed, myUid) : []), [chats, removed, myUid]);
-  const visible = useMemo(() => buildVisibleLists(contacts, query, results, myUid ?? ''), [contacts, query, results, myUid]);
+  const contacts = useMemo<Contact[]>(() => {
+  if (!myUid) return [];
+
+  return contactRequests
+    .filter((request) => request.status === 'accepted')
+    .map((request) => {
+      const isRequester = request.requesterUid === myUid;
+      const otherUid = isRequester
+        ? request.recipientUid
+        : request.requesterUid;
+      const otherInfo = isRequester
+        ? request.recipientInfo
+        : request.requesterInfo;
+
+      return {
+        uid: otherUid,
+        displayName: otherInfo?.displayName || 'GI Meet user',
+        photoURL: otherInfo?.photoURL ?? null,
+        chatId: '',
+        lastMessageAt: 0,
+      };
+    });
+}, [contactRequests, myUid]);
+
+const visible = useMemo(
+  () => buildVisibleLists(contacts, query, results, myUid ?? ''),
+  [contacts, query, results, myUid]
+);
   const loading = !loadError && (chats === null || removed === null);
   const hasQuery = query.trim().replace(/^@/, '').length > 0;
 
@@ -155,8 +202,6 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
         person.uid,
         { displayName: person.displayName, photoURL: person.photoURL }
       );
-      // Chatting with someone again puts them back in my contacts.
-      if (removed?.has(person.uid)) await restoreContact(profile.uid, person.uid).catch(() => undefined);
       onClose();
       navigate(`/chat/${chatId}`);
     } catch {
@@ -165,13 +210,31 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+async function sendRequest(person: { uid: string; displayName: string }) {
+  if (!profile || openingUid) return;
+
+  setOpeningUid(person.uid);
+  setActionError(null);
+
+  try {
+    await sendContactRequest(profile.uid, person.uid);
+    showToast(`Contact request sent to ${person.displayName}.`, 'success');
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Could not send contact request. Please try again.';
+    setActionError(message);
+  } finally {
+    setOpeningUid(null);
+  }
+}
   async function confirmRemoval() {
     if (!profile || !pendingRemoval) return;
     const target = pendingRemoval;
     setPendingRemoval(null);
     try {
-      await removeContact(profile.uid, target.uid);
-      showToast(`${target.displayName} was removed from your contacts. Your chat history was not deleted.`, 'success');
+      await removeAcceptedContact(profile.uid, target.uid);
+await removeContact(profile.uid, target.uid);
+      showToast(`${target.displayName} was removed from your contacts. Your chat history remains intact. A new request must be accepted to reconnect.`, 'success');
     } catch {
       showToast('Could not remove this contact. Please try again.', 'error');
     }
@@ -251,7 +314,9 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
               ))}
             </>
           )}
-
+<span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+  Send request
+</span>
           {!loading && !loadError && !hasQuery && contacts.length === 0 && (
             <p style={mutedStyle}>No contacts yet. Search by username to start a chat.</p>
           )}
@@ -271,7 +336,7 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
               )}
               {!searching && !searchError && query.trim().replace(/^@/, '').length < 2 && <p style={mutedStyle}>Type at least 2 characters to search by username.</p>}
               {visible.others.map((person) => (
-                <button key={person.uid} type="button" style={rowButtonStyle} disabled={Boolean(openingUid)} onClick={() => openChat(person)}>
+                <button key={person.uid} type="button" style={rowButtonStyle} disabled={Boolean(openingUid)} onClick={() => sendRequest(person)}>
                   <Avatar name={person.displayName} photoURL={person.photoURL} />
                   <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                     <span style={{ display: 'block', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.displayName}</span>

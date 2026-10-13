@@ -12,6 +12,13 @@ import { Plus, Archive, BellOff } from 'lucide-react';
 import { soundService } from '../../services/soundService';
 import { createIncomingMessageDetector } from '../../utils/incomingMessageDetector';
 import { subscribeToRemovedContacts } from '../contacts/contactService';
+import {
+  subscribeToMyContactRequests,
+  acceptContactRequest,
+  rejectContactRequest,
+  type ContactRequest,
+} from '../contacts/contactRequestService';
+import { Check, X } from 'lucide-react';
 
 export function ChatList() {
   const navigate = useNavigate();
@@ -21,8 +28,43 @@ export function ChatList() {
   const [showArchived, setShowArchived] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [removedContactUids, setRemovedContactUids] = useState<Set<string>>(new Set());
-
+  const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
+  const [requestActionId, setRequestActionId] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState('');
   const myUid = profile?.uid;
+
+  const incomingRequests = contactRequests.filter(
+    (request) => request.recipientUid === myUid && request.status === 'pending'
+  );
+
+  const outgoingRequests = contactRequests.filter(
+    (request) => request.requesterUid === myUid && request.status === 'pending'
+  );
+
+  async function handleRequestAction(
+    request: ContactRequest,
+    action: 'accept' | 'reject'
+  ) {
+    if (!myUid) return;
+
+    setRequestActionId(request.id);
+    setRequestError('');
+
+    try {
+      if (action === 'accept') {
+        await acceptContactRequest(myUid, request);
+      } else {
+        await rejectContactRequest(myUid, request);
+      }
+    } catch (error) {
+      console.error(`Could not ${action} contact request:`, error);
+      setRequestError(
+        error instanceof Error ? error.message : 'Request action failed. Please try again.'
+      );
+    } finally {
+      setRequestActionId(null);
+    }
+  }
 
   useEffect(() => {
     if (!myUid) return;
@@ -42,12 +84,28 @@ export function ChatList() {
       (error) => console.error('Could not load removed contacts:', error)
     );
   }, [myUid]);
+useEffect(() => {
+  if (!myUid) {
+    setContactRequests([]);
+    return;
+  }
+
+  return subscribeToMyContactRequests(
+    myUid,
+    setContactRequests,
+    (error) => {
+      console.error('Could not load contact requests:', error);
+      setRequestError('Contact requests could not be loaded.');
+    }
+  );
+}, [myUid]);
 
   // --- Unread counts --------------------------------------------------------------
   // Re-subscribe ONLY when the set of chats or someone's read marker really changes - not on every chat
   // document update (typing indicators, last-message changes...). Each listener reads only the messages
   // NEWER than my read marker, so it stays small. lastReadAt is epoch ms (docToChat converts it).
   const chatsRef = useRef<Chat[]>([]);
+
   useEffect(() => {
     chatsRef.current = chats;
   }, [chats]);
@@ -88,11 +146,81 @@ export function ChatList() {
     const inSelectedArchive = showArchived
       ? c.archivedBy.includes(profile.uid)
       : !c.archivedBy.includes(profile.uid);
-    return inSelectedArchive && !removedContactUids.has(otherUid);
+    const isAcceptedContact = contactRequests.some(
+  (request) =>
+    request.status === 'accepted' &&
+    request.members.includes(myUid ?? '') &&
+    request.members.includes(otherUid)
+);
+
+return inSelectedArchive &&
+  (!removedContactUids.has(otherUid) || isAcceptedContact);
   });
 
   return (
     <div style={{ padding: '20px 0' }}>
+
+  {(incomingRequests.length > 0 || outgoingRequests.length > 0 || requestError) && (
+    <section style={{ padding: '0 20px 16px' }}>
+      <h2 style={{ fontSize: 17, marginBottom: 10 }}>Contact requests</h2>
+
+      {requestError && (
+        <p role="alert" style={{ color: 'var(--color-danger, #dc2626)', fontSize: 13 }}>
+          {requestError}
+        </p>
+      )}
+
+      {incomingRequests.map((request) => {
+        const person = request.requesterInfo;
+
+        return (
+          <div
+            key={request.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 0',
+              borderBottom: '1px solid var(--color-border)',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600 }}>
+                {person?.displayName || 'GI Meet user'}
+              </div>
+              {person?.username && (
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                  @{person.username}
+                </div>
+              )}
+            </div>
+
+            <button
+              className="rb-btn rb-btn--primary"
+              disabled={requestActionId !== null}
+              onClick={() => void handleRequestAction(request, 'accept')}
+            >
+              <Check size={14} /> Accept
+            </button>
+
+            <button
+              className="rb-btn rb-btn--outline"
+              disabled={requestActionId !== null}
+              onClick={() => void handleRequestAction(request, 'reject')}
+            >
+              <X size={14} /> Reject
+            </button>
+          </div>
+        );
+      })}
+
+      {outgoingRequests.map((request) => (
+        <div key={request.id} style={{ padding: '8px 0', fontSize: 13 }}>
+          Request sent to {request.recipientInfo?.displayName || 'GI Meet user'} — awaiting response
+        </div>
+      ))}
+    </section>
+  )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 16px' }}>
         <h1 style={{ fontSize: 22 }}>Chats</h1>
         <div style={{ display: 'flex', gap: 8 }}>
