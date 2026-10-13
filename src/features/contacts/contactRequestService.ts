@@ -97,8 +97,11 @@ export async function sendContactRequest(
   };
 
   // create-only write: never overwrite an existing pending or accepted relation.
+  console.log('[ContactRequest] Starting transaction for:', id);
   await runTransaction(db, async (transaction) => {
+    console.log('[ContactRequest] Reading document:', ref.path);
     const existing = await transaction.get(ref);
+    console.log('[ContactRequest] Document exists:', existing.exists());
 
     if (existing.exists()) {
       const data = existing.data();
