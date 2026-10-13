@@ -8,13 +8,12 @@ import { getOrCreateDirectChat } from '../../features/chat/chatService';
 import {
   sendContactRequest,
   removeAcceptedContact,
-  subscribeToMyContactRequests,
-  type ContactRequest,
 } from '../../features/contacts/contactRequestService';
 import {
-  removeContact,
   subscribeToContactChats,
   subscribeToRemovedContacts,
+  subscribeToMyAcceptedContacts,
+  type AcceptedContactDoc,
 } from '../../features/contacts/contactService';
 import {
   buildVisibleLists,
@@ -67,7 +66,7 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
 
   const [chats, setChats] = useState<ContactChatDoc[] | null>(null);
   const [removed, setRemoved] = useState<Set<string> | null>(null);
-  const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
+  const [acceptedContacts, setAcceptedContacts] = useState<AcceptedContactDoc[]>([]);
   const [removedUnavailable, setRemovedUnavailable] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -88,6 +87,16 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
     setRemovedUnavailable(false);
     setChats(null);
     setRemoved(null);
+    setAcceptedContacts([]);
+
+    const unsubscribeAccepted = subscribeToMyAcceptedContacts(
+      myUid,
+      setAcceptedContacts,
+      (error) => {
+        console.error('Could not load accepted contacts:', error);
+        setLoadError('Could not load your contacts. Check your connection and try again.');
+      }
+    );
 
     const unsubscribeChats = subscribeToContactChats(myUid, setChats, () =>
       setLoadError('Could not load your contacts. Check your connection and try again.')
@@ -99,6 +108,7 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
       setRemovedUnavailable(true);
     });
     return () => {
+      unsubscribeAccepted();
       unsubscribeChats();
       unsubscribeRemoved();
     };
@@ -136,22 +146,6 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
   }, [query, myUid, removed]);
 
   useEffect(() => {
-  if (!myUid) {
-    setContactRequests([]);
-    return;
-  }
-
-  return subscribeToMyContactRequests(
-    myUid,
-    setContactRequests,
-    (error) => {
-      console.error('Could not load contact requests:', error);
-      setActionError('Could not load contact requests. Please try again.');
-    }
-  );
-}, [myUid]);
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !pendingRemoval) onClose();
     };
@@ -162,26 +156,22 @@ export function NewChatModal({ onClose }: { onClose: () => void }) {
   const contacts = useMemo<Contact[]>(() => {
   if (!myUid) return [];
 
-  return contactRequests
-    .filter((request) => request.status === 'accepted')
-    .map((request) => {
-      const isRequester = request.requesterUid === myUid;
-      const otherUid = isRequester
-        ? request.recipientUid
-        : request.requesterUid;
-      const otherInfo = isRequester
-        ? request.recipientInfo
-        : request.requesterInfo;
+  return acceptedContacts.map((contact) => {
+    const isRequester = contact.requesterUid === myUid;
+    const otherUid = contact.members.find((uid) => uid !== myUid) ?? '';
+    const otherInfo = isRequester
+      ? contact.recipientInfo
+      : contact.requesterInfo;
 
-      return {
-        uid: otherUid,
-        displayName: otherInfo?.displayName || 'GI Meet user',
-        photoURL: otherInfo?.photoURL ?? null,
-        chatId: '',
-        lastMessageAt: 0,
-      };
-    });
-}, [contactRequests, myUid]);
+    return {
+      uid: otherUid,
+      displayName: otherInfo?.displayName || 'GI Meet user',
+      photoURL: otherInfo?.photoURL ?? null,
+      chatId: '',
+      lastMessageAt: 0,
+    };
+  }).filter((contact) => contact.uid !== '');
+}, [acceptedContacts, myUid]);
 
 const visible = useMemo(
   () => buildVisibleLists(contacts, query, results, myUid ?? ''),
@@ -233,7 +223,7 @@ async function sendRequest(person: { uid: string; displayName: string }) {
     setPendingRemoval(null);
     try {
       await removeAcceptedContact(profile.uid, target.uid);
-await removeContact(profile.uid, target.uid);
+
       showToast(`${target.displayName} was removed from your contacts. Your chat history remains intact. A new request must be accepted to reconnect.`, 'success');
     } catch {
       showToast('Could not remove this contact. Please try again.', 'error');
@@ -360,7 +350,7 @@ await removeContact(profile.uid, target.uid);
       {pendingRemoval && (
         <ConfirmDialog
           title="Remove contact?"
-          message={`${pendingRemoval.displayName} will be removed from your contacts. Your chat and message history stay exactly as they are, and their account and contacts are not affected. You can message them again any time by searching their username.`}
+          message={`${pendingRemoval.displayName} will be removed from your contacts and hidden from your chat list. Your chat and message history will not be deleted. To reconnect, send a new contact request and wait for it to be accepted.`}
           confirmLabel="Remove contact"
           danger
           onConfirm={confirmRemoval}

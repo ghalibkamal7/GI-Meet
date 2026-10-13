@@ -38,7 +38,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // --- contactRequests/{requestId} --------------------------------------
+    // --- contactRequests/{requestId} — pending requests only ---------------
     match /contactRequests/{requestId} {
       function isRequestMember() {
         return isSignedIn() && request.auth.uid in resource.data.members;
@@ -46,7 +46,6 @@ service cloud.firestore {
 
       allow read: if isRequestMember();
 
-      // Only the requester can create a pending request with a deterministic ID.
       allow create: if isSignedIn()
                     && request.resource.data.requesterUid == request.auth.uid
                     && request.resource.data.recipientUid is string
@@ -58,23 +57,52 @@ service cloud.firestore {
                     && request.resource.data.status == 'pending'
                     && requestId == (request.auth.uid < request.resource.data.recipientUid
                         ? request.auth.uid + '__' + request.resource.data.recipientUid
-                        : request.resource.data.recipientUid + '__' + request.auth.uid);
+                        : request.resource.data.recipientUid + '__' + request.auth.uid)
+                    && !exists(/databases/$(database)/documents/contacts/$(requestId));
 
-      // Only the recipient can accept a pending request.
-      allow update: if isRequestMember()
+      // Requests cannot be changed into accepted records; acceptance deletes the request.
+      allow update: if false;
+
+      // Only the recipient can reject or accept (by deleting during the accept transaction).
+      allow delete: if isSignedIn()
                     && resource.data.status == 'pending'
                     && resource.data.recipientUid == request.auth.uid
-                    && request.resource.data.status == 'accepted'
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt'])
-                    && request.resource.data.members == resource.data.members
-                    && request.resource.data.requesterUid == resource.data.requesterUid
-                    && request.resource.data.recipientUid == resource.data.recipientUid;
+                    && request.auth.uid in resource.data.members;
+    }
 
-      // A recipient may reject a pending request; either member may remove an accepted contact.
-      allow delete: if isRequestMember()
-                    && ((resource.data.status == 'pending'
-                         && resource.data.recipientUid == request.auth.uid)
-                        || resource.data.status == 'accepted');
+    // --- contacts/{contactId} — accepted relationships --------------------
+    match /contacts/{contactId} {
+      function contactPath() {
+        return /databases/$(database)/documents/contacts/$(contactId);
+      }
+
+      // Allow checking a missing deterministic ID; existing contact data is member-only.
+      allow get: if isSignedIn()
+                 && (!exists(contactPath())
+                     || request.auth.uid in resource.data.members);
+      allow list: if isSignedIn()
+                  && request.auth.uid in resource.data.members;
+
+      // An accepted relationship can only be created by the recipient of its pending request.
+      allow create: if isSignedIn()
+                    && exists(/databases/$(database)/documents/contactRequests/$(contactId))
+                    && get(/databases/$(database)/documents/contactRequests/$(contactId)).data.status == 'pending'
+                    && get(/databases/$(database)/documents/contactRequests/$(contactId)).data.recipientUid == request.auth.uid
+                    && request.resource.data.members == get(/databases/$(database)/documents/contactRequests/$(contactId)).data.members
+                    && request.resource.data.requesterUid == get(/databases/$(database)/documents/contactRequests/$(contactId)).data.requesterUid
+                    && request.resource.data.recipientUid == get(/databases/$(database)/documents/contactRequests/$(contactId)).data.recipientUid
+                    && request.resource.data.requesterInfo == get(/databases/$(database)/documents/contactRequests/$(contactId)).data.requesterInfo
+                    && request.resource.data.recipientInfo == get(/databases/$(database)/documents/contactRequests/$(contactId)).data.recipientInfo
+                    && request.auth.uid in request.resource.data.members
+                    && request.resource.data.members.size() == 2
+                    && contactId == (request.resource.data.requesterUid < request.resource.data.recipientUid
+                        ? request.resource.data.requesterUid + '__' + request.resource.data.recipientUid
+                        : request.resource.data.recipientUid + '__' + request.resource.data.requesterUid);
+
+      // Relationship metadata is immutable; removal never deletes chats or messages.
+      allow update: if false;
+      allow delete: if isSignedIn()
+                    && request.auth.uid in resource.data.members;
     }
 
     // --- chats/{chatId} — 1-1 chat, only the two participants ------------

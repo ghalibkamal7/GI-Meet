@@ -3,6 +3,45 @@ import { db } from '../../firebase/firebaseConfig';
 import { toMillis } from '../chat/readState';
 import type { ContactChatDoc } from './contacts';
 
+export interface AcceptedContactDoc {
+  id: string;
+  members: string[];
+  requesterUid: string;
+  recipientUid: string;
+  requesterInfo?: { displayName?: string; username?: string; photoURL?: string | null };
+  recipientInfo?: { displayName?: string; username?: string; photoURL?: string | null };
+  acceptedAt: number;
+}
+
+/** Accepted relationships live in contacts/{sortedUidA__sortedUidB}. */
+export function subscribeToMyAcceptedContacts(
+  uid: string,
+  onData: (contacts: AcceptedContactDoc[]) => void,
+  onError: (error: unknown) => void
+): () => void {
+  const q = query(
+    collection(db, 'contacts'),
+    where('members', 'array-contains', uid)
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => onData(snap.docs.map((d) => {
+      const data = d.data({ serverTimestamps: 'estimate' });
+      return {
+        id: d.id,
+        members: Array.isArray(data.members) ? data.members : [],
+        requesterUid: typeof data.requesterUid === 'string' ? data.requesterUid : '',
+        recipientUid: typeof data.recipientUid === 'string' ? data.recipientUid : '',
+        requesterInfo: data.requesterInfo,
+        recipientInfo: data.recipientInfo,
+        acceptedAt: toMillis(data.acceptedAt),
+      };
+    })),
+    onError
+  );
+}
+
 /**
  * All chats I take part in — INCLUDING ones I "deleted" (hidden) from my chat list, because deleting a chat
  * does not make someone stop being a contact. Single array-contains filter: no composite index needed.

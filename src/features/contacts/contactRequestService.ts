@@ -6,13 +6,13 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import { getUserProfile } from '../../services/userService';
 
-export type ContactRequestStatus = 'pending' | 'accepted';
+export type ContactRequestStatus = 'pending';
 
 export interface ContactRequest {
   id: string;
@@ -41,7 +41,7 @@ function toRequest(id: string, data: Record<string, unknown>): ContactRequest {
     members: Array.isArray(data.members) ? data.members as string[] : [],
     requesterUid: typeof data.requesterUid === 'string' ? data.requesterUid : '',
     recipientUid: typeof data.recipientUid === 'string' ? data.recipientUid : '',
-    status: data.status === 'accepted' ? 'accepted' : 'pending',
+    status: 'pending',
     requesterInfo: data.requesterInfo as ContactRequest['requesterInfo'],
     recipientInfo: data.recipientInfo as ContactRequest['recipientInfo'],
     createdAt: typeof timestamp === 'number'
@@ -74,7 +74,8 @@ export async function sendContactRequest(
   recipientUid: string
 ): Promise<void> {
   const id = relationId(requesterUid, recipientUid);
-  const ref = doc(db, 'contactRequests', id);
+  const requestRef = doc(db, 'contactRequests', id);
+  const contactRef = doc(db, 'contacts', id);
 
   const [requester, recipient] = await Promise.all([
     getUserProfile(requesterUid),
@@ -96,32 +97,16 @@ export async function sendContactRequest(
     photoURL: recipient.photoURL ?? null,
   };
 
-  // create-only write: never overwrite an existing pending or accepted relation.
-  console.log('[ContactRequest] Starting transaction for:', id);
   await runTransaction(db, async (transaction) => {
-    console.log('[ContactRequest] Reading document:', ref.path);
-    const existing = await transaction.get(ref);
-    console.log('[ContactRequest] Document exists:', existing.exists());
+    // The rules allow reading a missing contact document. Do not read a
+    // missing contactRequests document: its read is intentionally denied.
+    const existingContact = await transaction.get(contactRef);
 
-    if (existing.exists()) {
-      const data = existing.data();
-
-      if (data.status === 'accepted') {
-        throw new Error('This user is already your contact.');
-      }
-
-      if (data.requesterUid === requesterUid && data.status === 'pending') {
-        throw new Error('You have already sent a contact request.');
-      }
-
-      if (data.recipientUid === requesterUid && data.status === 'pending') {
-        throw new Error('This user has already sent you a request.');
-      }
-
-      throw new Error('A contact request already exists.');
+    if (existingContact.exists()) {
+      throw new Error('This user is already your contact.');
     }
 
-    transaction.set(ref, {
+    transaction.set(requestRef, {
       members: [requesterUid, recipientUid],
       requesterUid,
       recipientUid,
@@ -130,6 +115,13 @@ export async function sendContactRequest(
       recipientInfo,
       createdAt: serverTimestamp(),
     });
+  }).catch((error: unknown) => {
+    if (error instanceof Error && error.message.startsWith('This user is already')) {
+      throw error;
+    }
+    throw new Error(
+      'Could not send the request. A request may already exist, or the operation was denied. Check pending requests and try again.'
+    );
   });
 }
 
@@ -141,9 +133,38 @@ export async function acceptContactRequest(
     throw new Error('This request cannot be accepted.');
   }
 
-  await updateDoc(doc(db, 'contactRequests', request.id), {
-    status: 'accepted',
-    acceptedAt: serverTimestamp(),
+  const requestRef = doc(db, 'contactRequests', request.id);
+  const contactRef = doc(db, 'contacts', request.id);
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(requestRef);
+
+    if (!snapshot.exists()) {
+      throw new Error('This contact request no longer exists.');
+    }
+
+    const data = snapshot.data();
+
+    if (
+      data.status !== 'pending' ||
+      data.recipientUid !== currentUid ||
+      !Array.isArray(data.members) ||
+      !data.members.includes(currentUid) ||
+      data.requesterUid !== request.requesterUid
+    ) {
+      throw new Error('This request cannot be accepted.');
+    }
+
+    transaction.set(contactRef, {
+      members: data.members,
+      requesterUid: data.requesterUid,
+      recipientUid: data.recipientUid,
+      requesterInfo: data.requesterInfo,
+      recipientInfo: data.recipientInfo,
+      acceptedAt: serverTimestamp(),
+    });
+
+    transaction.delete(requestRef);
   });
 }
 
@@ -163,7 +184,14 @@ export async function removeAcceptedContact(
   otherUid: string
 ): Promise<void> {
   const id = relationId(currentUid, otherUid);
-  const ref = doc(db, 'contactRequests', id);
 
-  await deleteDoc(ref);
+  const batch = writeBatch(db);
+
+  batch.delete(doc(db, 'contacts', id));
+  batch.set(
+    doc(db, 'users', currentUid, 'removedContacts', otherUid),
+    { removedAt: serverTimestamp() }
+  );
+
+  await batch.commit();
 }

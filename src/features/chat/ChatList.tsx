@@ -11,7 +11,10 @@ import { NewChatModal } from '../../components/common/NewChatModal';
 import { Plus, Archive, BellOff } from 'lucide-react';
 import { soundService } from '../../services/soundService';
 import { createIncomingMessageDetector } from '../../utils/incomingMessageDetector';
-import { subscribeToRemovedContacts } from '../contacts/contactService';
+import {
+  subscribeToRemovedContacts,
+  subscribeToMyAcceptedContacts,
+} from '../contacts/contactService';
 import {
   subscribeToMyContactRequests,
   acceptContactRequest,
@@ -29,6 +32,7 @@ export function ChatList() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [removedContactUids, setRemovedContactUids] = useState<Set<string>>(new Set());
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
+  const [acceptedContactUids, setAcceptedContactUids] = useState<Set<string>>(new Set());
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
   const [requestError, setRequestError] = useState('');
   const myUid = profile?.uid;
@@ -100,6 +104,27 @@ useEffect(() => {
   );
 }, [myUid]);
 
+  useEffect(() => {
+    if (!myUid) {
+      setAcceptedContactUids(new Set());
+      return;
+    }
+
+    return subscribeToMyAcceptedContacts(
+      myUid,
+      (contacts) => {
+        const uids = new Set<string>();
+        for (const contact of contacts) {
+          for (const memberUid of contact.members) {
+            if (memberUid !== myUid) uids.add(memberUid);
+          }
+        }
+        setAcceptedContactUids(uids);
+      },
+      (error) => console.error('Could not load accepted contacts:', error)
+    );
+  }, [myUid]);
+
   // --- Unread counts --------------------------------------------------------------
   // Re-subscribe ONLY when the set of chats or someone's read marker really changes - not on every chat
   // document update (typing indicators, last-message changes...). Each listener reads only the messages
@@ -146,15 +171,10 @@ useEffect(() => {
     const inSelectedArchive = showArchived
       ? c.archivedBy.includes(profile.uid)
       : !c.archivedBy.includes(profile.uid);
-    const isAcceptedContact = contactRequests.some(
-  (request) =>
-    request.status === 'accepted' &&
-    request.members.includes(myUid ?? '') &&
-    request.members.includes(otherUid)
-);
+    const isAcceptedContact = acceptedContactUids.has(otherUid);
 
-return inSelectedArchive &&
-  (!removedContactUids.has(otherUid) || isAcceptedContact);
+    return inSelectedArchive &&
+      (!removedContactUids.has(otherUid) || isAcceptedContact);
   });
 
   return (

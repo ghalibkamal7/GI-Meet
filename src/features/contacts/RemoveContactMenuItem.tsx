@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { UserMinus } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import { removeContact } from './contactService';
 import { removeAcceptedContact } from './contactRequestService';
 
 /**
- * "Remove contact" for the chat options menu. It is its own action: it does NOT delete the chat, does NOT block,
- * and does NOT touch the other person's account or contacts — it only hides them from MY contacts list.
- * Pass `className`/`style` so it matches the other rows of your menu.
+ * Removes the accepted contact relationship and hides the contact
+ * from the current user's chat list without deleting chat history
+ * or messages. Reconnecting requires a new accepted contact request.
  */
 export function RemoveContactMenuItem({
   currentUid,
@@ -32,7 +31,6 @@ export function RemoveContactMenuItem({
     setConfirming(false);
     try {
       await removeAcceptedContact(currentUid, otherUid);
-await removeContact(currentUid, otherUid);
       showToast(`${otherName} was removed from your contacts. Your chat history was not deleted.`, 'success');
       onRemoved?.();
     } catch {
@@ -55,7 +53,7 @@ await removeContact(currentUid, otherUid);
       {confirming && (
         <ConfirmDialog
           title="Remove contact?"
-          message={`${otherName} will be removed from your contacts. Your chat and message history will remain intact. To become contacts again, a new contact request must be accepted.`}
+          message={`${otherName} will be removed from your contacts and hidden from your chat list. Your chat and message history will not be deleted. To reconnect, send a new contact request and wait for it to be accepted.`}
           confirmLabel="Remove contact"
           danger
           onConfirm={handleConfirm}
