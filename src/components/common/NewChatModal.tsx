@@ -304,9 +304,7 @@ async function sendRequest(person: { uid: string; displayName: string }) {
               ))}
             </>
           )}
-<span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-  Send request
-</span>
+
           {!loading && !loadError && !hasQuery && contacts.length === 0 && (
             <p style={mutedStyle}>No contacts yet. Search by username to start a chat.</p>
           )}
@@ -332,7 +330,11 @@ async function sendRequest(person: { uid: string; displayName: string }) {
                     <span style={{ display: 'block', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.displayName}</span>
                     {person.username && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>@{person.username}</span>}
                   </span>
-                  {openingUid === person.uid && <Loader2 className="rb-spin" size={16} strokeWidth={2} aria-label="Opening" />}
+                  {openingUid === person.uid ? (
+                    <Loader2 className="rb-spin" size={16} strokeWidth={2} aria-label="Sending request" />
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'var(--color-brand-600)', fontWeight: 500 }}>Send request</span>
+                  )}
                 </button>
               ))}
               {!searching && !searchError && query.trim().replace(/^@/, '').length >= 2 && visible.others.length === 0 && visible.contacts.length === 0 && (
