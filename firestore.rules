@@ -328,9 +328,7 @@ service cloud.firestore {
                       || (
                         request.resource.data.lastMessageSenderId == request.auth.uid
                         && request.resource.data.diff(resource.data).affectedKeys().hasAll([
-                          'lastMessage',
-                          'lastMessageAt',
-                          'lastMessageSenderId'
+                          'lastMessageAt'
                         ])
                       )
                     )

@@ -14,6 +14,7 @@ import {
   limit,
   orderBy,
   query,
+  serverTimestamp,
   startAfter,
   setDoc,
   updateDoc,
@@ -227,6 +228,76 @@ try {
     hiddenFor: [],
   });
   await assertSucceeds(memberSend.commit());
+
+  console.log('Direct chats: message creation succeeds, and the same sender can repeat a preview');
+  await assertSucceeds(setDoc(doc(alice, 'chats/alice_bob/messages/alice-repeat-send'), {
+    ...messagePayload,
+    createdAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(doc(alice, 'chats/alice_bob'), {
+    lastMessage: '🔒 Encrypted message',
+    lastMessageCipher: 'ciphertext-placeholder',
+    lastMessageIv: 'AA==',
+    lastMessageAt: serverTimestamp(),
+    lastMessageSenderId: 'alice',
+    hiddenFor: [],
+  }));
+  const repeatedSend = writeBatch(alice);
+  repeatedSend.set(doc(alice, 'chats/alice_bob/messages/alice-repeat-batch'), {
+    ...messagePayload,
+    createdAt: serverTimestamp(),
+  });
+  repeatedSend.update(doc(alice, 'chats/alice_bob'), {
+    lastMessage: '🔒 Encrypted message',
+    lastMessageCipher: 'ciphertext-placeholder',
+    lastMessageIv: 'AA==',
+    lastMessageAt: serverTimestamp(),
+    lastMessageSenderId: 'alice',
+    hiddenFor: [],
+  });
+  await assertSucceeds(repeatedSend.commit());
+  const bobSend = writeBatch(bob);
+  bobSend.set(doc(bob, 'chats/alice_bob/messages/bob-send'), {
+    ...messagePayload,
+    senderId: 'bob',
+    readBy: ['bob'],
+    createdAt: serverTimestamp(),
+  });
+  bobSend.update(doc(bob, 'chats/alice_bob'), {
+    lastMessage: 'Bob message',
+    lastMessageCipher: 'bob-ciphertext',
+    lastMessageIv: 'BB==',
+    lastMessageAt: serverTimestamp(),
+    lastMessageSenderId: 'bob',
+    hiddenFor: [],
+  });
+  await assertSucceeds(bobSend.commit());
+  const chatAfterBobSend = (await getDoc(doc(bob, 'chats/alice_bob'))).data();
+  await assertFails(updateDoc(doc(bob, 'chats/alice_bob'), {
+    lastMessage: 'Missing timestamp update',
+    lastMessageSenderId: 'bob',
+  }));
+  await assertFails(updateDoc(doc(bob, 'chats/alice_bob'), {
+    lastMessage: 'Unchanged timestamp update',
+    lastMessageAt: chatAfterBobSend.lastMessageAt,
+    lastMessageSenderId: 'bob',
+  }));
+  await assertFails(updateDoc(doc(bob, 'chats/alice_bob'), {
+    lastMessage: 'Spoofed sender',
+    lastMessageAt: serverTimestamp(),
+    lastMessageSenderId: 'alice',
+  }));
+  await assertFails(updateDoc(doc(bob, 'chats/alice_bob'), {
+    lastMessage: 'Unauthorized field update',
+    lastMessageAt: serverTimestamp(),
+    lastMessageSenderId: 'bob',
+    participants: ['alice', 'bob', 'mallory'],
+  }));
+  await assertFails(updateDoc(doc(outsider, 'chats/alice_bob'), {
+    lastMessage: 'Unauthorized participant update',
+    lastMessageAt: serverTimestamp(),
+    lastMessageSenderId: 'mallory',
+  }));
 
   const outsiderSend = writeBatch(outsider);
   outsiderSend.set(doc(outsider, 'chats/alice_bob/messages/outsider-send'), {
