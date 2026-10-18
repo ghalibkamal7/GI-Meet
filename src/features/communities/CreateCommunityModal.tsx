@@ -34,7 +34,7 @@ export function CreateCommunityModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 380, padding: 20 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Create community" style={{ width: 380, padding: 20 }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 4 }}>New community</h3>
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 16 }}>
           A community bundles multiple groups together under one roof, with community-wide announcements.

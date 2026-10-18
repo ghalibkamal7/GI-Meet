@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getCommunityByInviteCode, joinCommunity } from './communityService';
-import type { Community } from './communityTypes';
+import { getCommunityByInviteCode, joinCommunityByInviteCode } from './communityService';
+import type { CommunityInvitePreview } from '../../services/invitationService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 
 export function JoinCommunityPage() {
   const { inviteCode } = useParams<{ inviteCode: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [community, setCommunity] = useState<Community | null>(null);
+  const [community, setCommunity] = useState<CommunityInvitePreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,9 +26,9 @@ export function JoinCommunityPage() {
   async function handleJoin() {
     if (!profile || !community) return;
     setJoining(true);
-    await joinCommunity(community.id, profile.uid, { displayName: profile.displayName, photoURL: profile.photoURL });
+    const joinedId = await joinCommunityByInviteCode(inviteCode!);
     setJoining(false);
-    navigate(`/communities/${community.id}`);
+    navigate(`/communities/${joinedId}`);
   }
 
   if (loading) return <LoadingSpinner label="Loading invite…" />;
@@ -46,10 +46,10 @@ export function JoinCommunityPage() {
             <h2 style={{ marginBottom: 8 }}>{community?.name}</h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 4 }}>{community?.description}</p>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 20 }}>
-              {community?.members.length} members · {community?.groupIds.length} groups
+              {community?.membersCount} members · {community?.groupsCount} groups
             </p>
-            <button className="rb-btn rb-btn--primary" style={{ width: '100%' }} onClick={handleJoin} disabled={joining}>
-              {joining ? 'Joining…' : 'Join community'}
+            <button className="rb-btn rb-btn--primary" style={{ width: '100%' }} onClick={community?.alreadyMember ? () => navigate(`/communities/${community.id}`) : handleJoin} disabled={joining}>
+              {community?.alreadyMember ? 'Open community' : joining ? 'Joining…' : 'Join community'}
             </button>
           </>
         )}

@@ -21,7 +21,7 @@ export function PrivacyPage() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '16px 16px 40px' }}>
+    <div className="rb-page rb-page--narrow rb-privacy-page">
       <button
         type="button"
         onClick={() => navigate('/settings')}

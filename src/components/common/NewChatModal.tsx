@@ -35,7 +35,7 @@ function Avatar({ name, photoURL }: { name: string; photoURL: string | null }) {
         overflow: 'hidden',
         flexShrink: 0,
         background: 'var(--color-brand-100)',
-        color: 'var(--color-brand-700)',
+        color: 'var(--color-brand-600)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -233,7 +233,7 @@ async function sendRequest(person: { uid: string; displayName: string }) {
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div
-        className="rb-card"
+        className="rb-card rb-modal-card"
         role="dialog"
         aria-modal="true"
         aria-label="New chat"

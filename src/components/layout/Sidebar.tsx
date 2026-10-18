@@ -20,12 +20,12 @@ export function Sidebar() {
   return (
     <aside
       style={{
-        width: 248,
+        width: 260,
         flexShrink: 0,
         borderRight: '1px solid var(--color-border)',
         display: 'flex',
         flexDirection: 'column',
-        padding: '22px 14px',
+        padding: '24px 14px 18px',
         background: 'var(--color-surface)',
       }}
     >
@@ -53,7 +53,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1 }}>
+      <nav aria-label="Main navigation" style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, paddingTop: 8 }}>
         {NAV_ITEMS.map(({ to, label, Icon, end }) => (
           <NavLink
             key={to}
@@ -63,14 +63,15 @@ export function Sidebar() {
               display: 'flex',
               alignItems: 'center',
               gap: 11,
-              padding: '9px 12px',
+              padding: '10px 12px',
               borderRadius: 'var(--radius-sm)',
               fontSize: 14.5,
               fontWeight: isActive ? 600 : 500,
-              color: isActive ? 'var(--color-brand-700)' : 'var(--color-text)',
+              color: isActive ? 'var(--color-brand-600)' : 'var(--color-text)',
               background: isActive ? 'var(--color-brand-100)' : 'transparent',
               textDecoration: 'none',
               transition: 'background 0.12s ease',
+              minHeight: 44,
             })}
           >
             <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
@@ -99,7 +100,7 @@ export function Sidebar() {
             justifyContent: 'center',
             fontWeight: 600,
             fontSize: 13,
-            color: 'var(--color-brand-700)',
+            color: 'var(--color-brand-600)',
             overflow: 'hidden',
             flexShrink: 0,
           }}
@@ -129,6 +130,7 @@ export function Sidebar() {
           }}
           aria-label="Log out"
           title="Log out"
+          className="rb-icon-btn"
         >
           <LogOut size={16} strokeWidth={1.75} />
         </button>

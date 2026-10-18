@@ -2,6 +2,7 @@ export function LoadingSpinner({ label }: { label?: string }) {
   return (
     <div
       role="status"
+      aria-live="polite"
       style={{
         display: 'flex',
         flexDirection: 'column',

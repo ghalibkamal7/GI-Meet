@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Smile, Reply, Forward, Copy, Star, Pin, Pencil, Trash2, Paperclip } from 'lucide-react';
+import { Smile, Reply, Forward, Copy, Star, Pin, Pencil, Trash2, Paperclip, MoreHorizontal } from 'lucide-react';
 import type { Message } from '../../features/chat/chatTypes';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -44,20 +44,49 @@ export function MessageBubble({
     <div
       style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', marginBottom: 10 }}
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => {
-        setShowActions(false);
-        setShowEmojiPicker(false);
+      onMouseLeave={(event) => {
+        if (!event.currentTarget.contains(document.activeElement)) {
+          setShowActions(false);
+          setShowEmojiPicker(false);
+        }
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setShowActions(false);
+          setShowEmojiPicker(false);
+        }
       }}
     >
       <div style={{ maxWidth: '70%', position: 'relative' }}>
+        {!message.deleted && (
+          <button
+            type="button"
+            onClick={() => setShowActions((visible) => !visible)}
+            onFocus={() => setShowActions(true)}
+            style={{ ...actionBtnStyle, position: 'absolute', top: -42, right: isOwn ? 0 : 'auto', left: isOwn ? 'auto' : 0, zIndex: 1 }}
+            aria-label="Message actions"
+            aria-expanded={showActions}
+            aria-controls={`message-actions-${message.id}`}
+          >
+            <MoreHorizontal size={17} strokeWidth={1.75} />
+          </button>
+        )}
         {showActions && !message.deleted && (
           <div
+            id={`message-actions-${message.id}`}
+            data-message-actions
+            role="group"
+            aria-label="Message actions"
             style={{
               position: 'absolute',
-              top: -30,
+              top: -32,
               right: isOwn ? 0 : 'auto',
               left: isOwn ? 'auto' : 0,
               display: 'flex',
+              flexWrap: 'wrap',
+              width: 'min(320px, calc(100vw - 32px))',
+              boxSizing: 'border-box',
+              zIndex: 2,
               gap: 2,
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
@@ -68,45 +97,49 @@ export function MessageBubble({
           >
             {onToggleReaction && (
               <span style={{ position: 'relative' }}>
-                <button onClick={() => setShowEmojiPicker((v) => !v)} style={actionBtnStyle} aria-label="React">
+                <button type="button" onClick={() => setShowEmojiPicker((v) => !v)} style={actionBtnStyle} aria-label="React">
                   <Smile size={14} strokeWidth={1.75} />
                 </button>
                 {showEmojiPicker && (
                   <EmojiPicker
-                    onSelect={(emoji) => onToggleReaction(message, emoji)}
+                    onSelect={(emoji) => {
+                      onToggleReaction(message, emoji);
+                      setShowEmojiPicker(false);
+                      setShowActions(false);
+                    }}
                     onClose={() => setShowEmojiPicker(false)}
                   />
                 )}
               </span>
             )}
-            <button onClick={() => onReply(message)} style={actionBtnStyle} aria-label="Reply">
+            <button type="button" onClick={() => { onReply(message); setShowActions(false); }} style={actionBtnStyle} aria-label="Reply">
               <Reply size={14} strokeWidth={1.75} />
             </button>
             {onForward && (
-              <button onClick={() => onForward(message)} style={actionBtnStyle} aria-label="Forward">
+              <button type="button" onClick={() => { onForward(message); setShowActions(false); }} style={actionBtnStyle} aria-label="Forward">
                 <Forward size={14} strokeWidth={1.75} />
               </button>
             )}
-            <button onClick={handleCopy} style={actionBtnStyle} aria-label="Copy">
+            <button type="button" onClick={handleCopy} style={actionBtnStyle} aria-label="Copy">
               <Copy size={14} strokeWidth={1.75} />
             </button>
             {onToggleStar && (
-              <button onClick={() => onToggleStar(message)} style={actionBtnStyle} aria-label="Star">
+              <button type="button" onClick={() => { onToggleStar(message); setShowActions(false); }} style={actionBtnStyle} aria-label={isStarred ? 'Unstar message' : 'Star message'}>
                 <Star size={14} strokeWidth={1.75} fill={isStarred ? 'var(--color-accent)' : 'none'} color={isStarred ? 'var(--color-accent)' : 'currentColor'} />
               </button>
             )}
             {onTogglePin && (
-              <button onClick={() => onTogglePin(message)} style={actionBtnStyle} aria-label="Pin">
+              <button type="button" onClick={() => { onTogglePin(message); setShowActions(false); }} style={actionBtnStyle} aria-label={isPinned ? 'Unpin message' : 'Pin message'}>
                 <Pin size={14} strokeWidth={1.75} fill={isPinned ? 'var(--color-brand-600)' : 'none'} color={isPinned ? 'var(--color-brand-600)' : 'currentColor'} />
               </button>
             )}
             {isOwn && onEdit && !message.attachment && (
-              <button onClick={() => onEdit(message)} style={actionBtnStyle} aria-label="Edit">
+              <button type="button" onClick={() => { onEdit(message); setShowActions(false); }} style={actionBtnStyle} aria-label="Edit message">
                 <Pencil size={14} strokeWidth={1.75} />
               </button>
             )}
             {isOwn && (
-              <button onClick={() => onDelete(message.id)} style={actionBtnStyle} aria-label="Delete">
+              <button type="button" onClick={() => { onDelete(message.id); setShowActions(false); }} style={actionBtnStyle} aria-label="Delete message">
                 <Trash2 size={14} strokeWidth={1.75} />
               </button>
             )}
@@ -199,8 +232,10 @@ export function MessageBubble({
           <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
             {reactionEntries.map(([emoji, uids]) => (
               <button
+                type="button"
                 key={emoji}
                 onClick={() => onToggleReaction?.(message, emoji)}
+                aria-label={`React with ${emoji}, ${uids.length} reactions`}
                 style={{
                   fontSize: 12,
                   background: uids.includes(currentUid) ? 'var(--color-brand-100)' : 'var(--color-surface-alt)',
@@ -224,7 +259,9 @@ const actionBtnStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
   borderRadius: 6,
-  padding: 6,
+  padding: 8,
+  minWidth: 36,
+  minHeight: 36,
   cursor: 'pointer',
   color: 'var(--color-text-muted)',
   display: 'flex',

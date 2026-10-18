@@ -36,7 +36,7 @@ export function AddSpotModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 360, padding: 20 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Create a Spot" style={{ width: 360, padding: 20 }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 14 }}>Add Spot</h3>
 
         {previewUrl ? (

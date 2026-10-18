@@ -112,8 +112,8 @@ export function ForwardMessageModal({ message, onClose }: { message: Message; on
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 360, padding: 20, maxHeight: '70vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 12 }}>Forward message</h3>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-labelledby="forward-message-title" style={{ width: 360, padding: 20, maxHeight: '70vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <h3 id="forward-message-title" style={{ marginBottom: 12 }}>Forward message</h3>
 
         {groups.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', margin: '10px 0 4px' }}>Groups</div>}
         {groups.map((g) => (

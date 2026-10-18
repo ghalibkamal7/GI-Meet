@@ -30,7 +30,7 @@ export function SpotPage() {
   const allViewed = (spots: Spot[]) => spots.every((s) => s.viewedBy.includes(profile.uid));
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="rb-page">
       <h1 style={{ fontSize: 22, marginBottom: 20 }}>Spot</h1>
 
       <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 12, marginBottom: 20 }}>
@@ -74,7 +74,7 @@ export function SpotPage() {
                   justifyContent: 'center',
                   fontWeight: 600,
                   fontSize: 20,
-                  color: 'var(--color-brand-700)',
+                  color: 'var(--color-brand-600)',
                   cursor: 'pointer',
                   overflow: 'hidden',
                 }}

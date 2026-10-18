@@ -7,6 +7,194 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function listAddedOnlyByCurrentUser(oldValues, newValues) {
+      return newValues.hasAll(oldValues)
+             && newValues.size() == oldValues.size() + 1
+             && request.auth.uid in newValues
+             && !(request.auth.uid in oldValues);
+    }
+
+    function listRemovedOnlyByCurrentUser(oldValues, newValues) {
+      return oldValues.hasAll(newValues)
+             && oldValues.size() == newValues.size() + 1
+             && request.auth.uid in oldValues
+             && !(request.auth.uid in newValues);
+    }
+
+    function listUnchangedOrRemovedCurrentUser(oldValues, newValues) {
+      return newValues == oldValues || listRemovedOnlyByCurrentUser(oldValues, newValues);
+    }
+
+    function ownArrayFieldChanged(field) {
+      let oldValues = resource.data.get(field, []);
+      let newValues = request.resource.data.get(field, []);
+      return newValues == oldValues
+             || listAddedOnlyByCurrentUser(oldValues, newValues)
+             || listRemovedOnlyByCurrentUser(oldValues, newValues);
+    }
+
+    function ownMapEntryChanged(field) {
+      let oldValues = resource.data.get(field, {});
+      let newValues = request.resource.data.get(field, {});
+      return newValues.diff(oldValues).affectedKeys().hasOnly([request.auth.uid]);
+    }
+
+    function ownArrayChange(oldValues, newValues) {
+      return newValues == oldValues
+             || listAddedOnlyByCurrentUser(oldValues, newValues)
+             || listRemovedOnlyByCurrentUser(oldValues, newValues);
+    }
+
+    function canUpdateMessage() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let ownerContentUpdate = request.auth.uid == resource.data.senderId
+                               && changed.hasOnly([
+                                 'text',
+                                 'editedAt',
+                                 'encrypted',
+                                 'iv',
+                                 'deleted',
+                                 'attachment'
+                               ]);
+      let participantMetadataUpdate = changed.hasOnly([
+                                         'readBy',
+                                         'starredBy',
+                                         'reactionUsers'
+                                       ])
+                                     && (!changed.hasAny(['readBy'])
+                                         || ownArrayFieldChanged('readBy'))
+                                     && (!changed.hasAny(['starredBy'])
+                                         || ownArrayFieldChanged('starredBy'))
+                                     && (!changed.hasAny(['reactionUsers'])
+                                         || ownMapEntryChanged('reactionUsers'));
+      return ownerContentUpdate || participantMetadataUpdate;
+    }
+
+    function meetingHost() {
+      return isSignedIn() && resource.data.hostUid == request.auth.uid;
+    }
+
+    function meetingHostOrCoHost() {
+      return meetingHost()
+             || (isSignedIn() && request.auth.uid in resource.data.get('coHosts', []));
+    }
+
+    function listUnchangedOrAddedSelf(oldValues, newValues) {
+      return newValues == oldValues
+             || listAddedOnlyByCurrentUser(oldValues, newValues);
+    }
+
+    function listUnchangedOrRemovedSelf(oldValues, newValues) {
+      return newValues == oldValues
+             || listRemovedOnlyByCurrentUser(oldValues, newValues);
+    }
+
+    function canJoinMeeting() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+               'activeParticipants',
+               'waitingParticipants',
+               'allParticipants',
+               'startedAt'
+             ])
+             && resource.data.get('locked', false) == false
+             && listUnchangedOrAddedSelf(
+               resource.data.get('allParticipants', []),
+               request.resource.data.get('allParticipants', [])
+             )
+             && (
+               (
+                 resource.data.get('waitingRoomEnabled', false)
+                 && request.auth.uid != resource.data.hostUid
+                 && !(request.auth.uid in resource.data.get('coHosts', []))
+                 && changed.hasOnly(['waitingParticipants', 'allParticipants'])
+                 && request.auth.uid in request.resource.data.get('waitingParticipants', [])
+                 && listUnchangedOrAddedSelf(
+                   resource.data.get('waitingParticipants', []),
+                   request.resource.data.get('waitingParticipants', [])
+                 )
+                 && request.resource.data.get('activeParticipants', [])
+                    == resource.data.get('activeParticipants', [])
+               )
+               || (
+                 (
+                   !resource.data.get('waitingRoomEnabled', false)
+                   || request.auth.uid == resource.data.hostUid
+                   || request.auth.uid in resource.data.get('coHosts', [])
+                 )
+                 && request.auth.uid in request.resource.data.get('activeParticipants', [])
+                 && listUnchangedOrAddedSelf(
+                   resource.data.get('activeParticipants', []),
+                   request.resource.data.get('activeParticipants', [])
+                 )
+                 && request.resource.data.get('waitingParticipants', [])
+                    == resource.data.get('waitingParticipants', [])
+                 && (
+                   request.resource.data.get('startedAt', null)
+                     == resource.data.get('startedAt', null)
+                   || resource.data.get('startedAt', null) == null
+                 )
+               )
+             );
+    }
+
+    function canLeaveMeeting() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isSignedIn()
+             && changed.hasOnly(['activeParticipants', 'waitingParticipants'])
+             && listUnchangedOrRemovedSelf(
+               resource.data.get('activeParticipants', []),
+               request.resource.data.get('activeParticipants', [])
+             )
+             && listUnchangedOrRemovedSelf(
+               resource.data.get('waitingParticipants', []),
+               request.resource.data.get('waitingParticipants', [])
+             );
+    }
+
+    function canUpdateMeeting() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let selfJoin = canJoinMeeting();
+      let selfLeave = canLeaveMeeting();
+      let hostOrCoHostControls = meetingHostOrCoHost()
+                                 && changed.hasOnly([
+                                   'locked',
+                                   'activeParticipants',
+                                   'waitingParticipants'
+                                 ]);
+      let hostControls = meetingHost()
+                         && (
+                           changed.hasOnly([
+                             'endedAt',
+                             'activeParticipants',
+                             'locked'
+                           ])
+                           || changed.hasOnly(['coHosts'])
+                         )
+                         && (
+                           !changed.hasAny(['coHosts'])
+                           || (
+                             request.resource.data.get('coHosts', []).hasAll(
+                               resource.data.get('coHosts', [])
+                             )
+                             && request.resource.data.get('coHosts', []).size()
+                                == resource.data.get('coHosts', []).size() + 1
+                             && resource.data.get('activeParticipants', [])
+                                .hasAll(request.resource.data.get('coHosts', []))
+                             || (
+                               resource.data.get('coHosts', []).hasAll(
+                                 request.resource.data.get('coHosts', [])
+                               )
+                               && resource.data.get('coHosts', []).size()
+                                  == request.resource.data.get('coHosts', []).size() + 1
+                               && resource.data.get('activeParticipants', [])
+                                  .hasAll(resource.data.get('coHosts', []))
+                             )
+                           )
+                         );
+      return isSignedIn() && (selfJoin || selfLeave || hostOrCoHostControls || hostControls);
+    }
+
     // --- users/{uid} -----------------------------------------------------
     match /users/{uid} {
       allow read: if isSignedIn();
@@ -112,8 +300,64 @@ service cloud.firestore {
       allow get: if isSignedIn()
                  && (!exists(/databases/$(database)/documents/chats/$(chatId))
                      || request.auth.uid in resource.data.participants);
-      allow list, update: if isSignedIn()
-                          && request.auth.uid in resource.data.participants;
+      allow list: if isSignedIn()
+                  && request.auth.uid in resource.data.participants;
+      allow update: if isSignedIn()
+                    && request.auth.uid in resource.data.participants
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'lastMessage',
+                      'lastMessageCipher',
+                      'lastMessageIv',
+                      'lastMessageAt',
+                      'lastMessageSenderId',
+                      'typing',
+                      'lastReadAt',
+                      'pinnedMessageIds',
+                      'mutedBy',
+                      'archivedBy',
+                      'hiddenFor'
+                    ])
+                    && (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                        'lastMessage',
+                        'lastMessageCipher',
+                        'lastMessageIv',
+                        'lastMessageAt',
+                        'lastMessageSenderId'
+                      ])
+                      || (
+                        request.resource.data.lastMessageSenderId == request.auth.uid
+                        && request.resource.data.diff(resource.data).affectedKeys().hasAll([
+                          'lastMessage',
+                          'lastMessageAt',
+                          'lastMessageSenderId'
+                        ])
+                      )
+                    )
+                    && (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['typing'])
+                      || ownMapEntryChanged('typing')
+                    )
+                    && (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastReadAt'])
+                      || ownMapEntryChanged('lastReadAt')
+                    )
+                    && (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['mutedBy'])
+                      || ownArrayFieldChanged('mutedBy')
+                    )
+                    && (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['archivedBy'])
+                      || ownArrayFieldChanged('archivedBy')
+                    )
+                    && (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['hiddenFor'])
+                      || ownArrayFieldChanged('hiddenFor')
+                      || (
+                        request.resource.data.hiddenFor == []
+                        && request.resource.data.lastMessageSenderId == request.auth.uid
+                      )
+                    );
       allow create: if isSignedIn()
                     && request.auth.uid in request.resource.data.participants
                     && request.resource.data.participants.size() == 2;
@@ -123,26 +367,148 @@ service cloud.firestore {
         allow create: if isSignedIn()
                       && request.resource.data.senderId == request.auth.uid
                       && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
-        // Sender can edit their own text/reactions/star fields (used for edit, soft-delete, reactions, starring).
-        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow update: if isSignedIn()
+                      && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+                      && canUpdateMessage();
         allow delete: if false;
       }
 
       match /polls/{pollId} {
         allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
-        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn()
+                      && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.get('votes', {}) == {}
+                      && request.resource.data.get('closed', false) == false;
+        allow update: if isSignedIn()
+                      && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+                      && (
+                        (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes'])
+                          && ownMapEntryChanged('votes')
+                        )
+                        || (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['closed'])
+                          && request.resource.data.closed == true
+                          && request.auth.uid == resource.data.createdBy
+                        )
+                      );
         allow delete: if false;
       }
     }
 
     // --- groups/{groupId} — members only ----------------------------------
     match /groups/{groupId} {
+      function isGroupMember() {
+        return isSignedIn() && request.auth.uid in resource.data.members;
+      }
+
+      function isGroupAdmin() {
+        return isGroupMember() && request.auth.uid in resource.data.get('admins', []);
+      }
+
+      function isGroupManager() {
+        return isGroupAdmin()
+               || (isGroupMember() && request.auth.uid in resource.data.get('coAdmins', []));
+      }
+
+      function canUpdateGroup() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let members = resource.data.get('members', []);
+        let newMembers = request.resource.data.get('members', []);
+        let admins = resource.data.get('admins', []);
+        let newAdmins = request.resource.data.get('admins', []);
+        let coAdmins = resource.data.get('coAdmins', []);
+        let newCoAdmins = request.resource.data.get('coAdmins', []);
+        return (
+          isGroupManager()
+          && changed.hasOnly(['name', 'description', 'photoURL'])
+        ) || (
+          isGroupAdmin()
+          && changed.hasOnly(['isRoom'])
+        ) || (
+          isGroupMember()
+          && changed.hasOnly(['mutedBy'])
+          && ownArrayFieldChanged('mutedBy')
+        ) || (
+          isGroupMember()
+          && changed.hasOnly(['lastReadAt'])
+          && ownMapEntryChanged('lastReadAt')
+        ) || (
+          isGroupMember()
+          && changed.hasOnly(['pinnedMessageIds'])
+        ) || (
+          isGroupMember()
+          && changed.hasOnly(['lastMessage', 'lastMessageAt', 'lastMessageSenderId'])
+          && request.resource.data.lastMessageSenderId == request.auth.uid
+          && changed.hasAll(['lastMessage', 'lastMessageAt', 'lastMessageSenderId'])
+        ) || (
+          isGroupManager()
+          && changed.hasOnly(['members', 'memberInfo'])
+          && newMembers.hasAll(members)
+          && newMembers.size() == members.size() + 1
+          && admins == newAdmins
+          && coAdmins == newCoAdmins
+        ) || (
+          isGroupAdmin()
+          && changed.hasOnly(['members', 'admins', 'coAdmins'])
+          && members.hasAll(newMembers)
+          && members.size() == newMembers.size() + 1
+          && newMembers.hasAll(newAdmins)
+          && newMembers.hasAll(newCoAdmins)
+          && admins.hasAll(newAdmins)
+          && coAdmins.hasAll(newCoAdmins)
+          && newAdmins.size() >= admins.size() - 1
+          && newCoAdmins.size() >= coAdmins.size() - 1
+        ) || (
+          isGroupAdmin()
+          && changed.hasOnly(['admins', 'coAdmins'])
+          && (
+            newAdmins == admins
+            || (
+              newAdmins.hasAll(admins)
+              && newAdmins.size() == admins.size() + 1
+            )
+          )
+          && (
+            newCoAdmins == coAdmins
+            || (
+              newCoAdmins.hasAll(coAdmins)
+              && newCoAdmins.size() == coAdmins.size() + 1
+            )
+            || (
+              coAdmins.hasAll(newCoAdmins)
+              && coAdmins.size() == newCoAdmins.size() + 1
+            )
+          )
+          && members.hasAll(newAdmins)
+          && members.hasAll(newCoAdmins)
+        ) || (
+          isGroupMember()
+          && changed.hasOnly(['members', 'admins', 'coAdmins'])
+          && listRemovedOnlyByCurrentUser(members, newMembers)
+          && listUnchangedOrRemovedCurrentUser(admins, newAdmins)
+          && listUnchangedOrRemovedCurrentUser(coAdmins, newCoAdmins)
+        ) || (
+          isGroupAdmin()
+          && changed.hasOnly(['communityId'])
+          && request.resource.data.get('communityId', null) == null
+        ) || (
+          isSignedIn()
+          && resource.data.get('createdBy', '') == request.auth.uid
+          && changed.hasOnly(['communityId'])
+          && request.resource.data.get('communityId', null) is string
+          && request.auth.uid in get(
+            /databases/$(database)/documents/communities/$(request.resource.data.communityId)
+          ).data.members
+        );
+      }
+
       allow read: if isSignedIn() && request.auth.uid in resource.data.members;
       allow create: if isSignedIn()
                     && request.auth.uid in request.resource.data.members
                     && request.auth.uid in request.resource.data.admins;
-      allow update: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow update: if canUpdateGroup();
       allow delete: if isSignedIn() && request.auth.uid in resource.data.admins;
 
       match /messages/{messageId} {
@@ -150,7 +516,9 @@ service cloud.firestore {
         allow create: if isSignedIn()
                       && request.resource.data.senderId == request.auth.uid
                       && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
-        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow update: if isSignedIn()
+                      && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members
+                      && canUpdateMessage();
         allow delete: if false;
       }
 
@@ -165,39 +533,118 @@ service cloud.firestore {
 
       match /polls/{pollId} {
         allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
-        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        allow create: if isSignedIn()
+                      && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.get('votes', {}) == {}
+                      && request.resource.data.get('closed', false) == false;
+        allow update: if isSignedIn()
+                      && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members
+                      && (
+                        (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes'])
+                          && ownMapEntryChanged('votes')
+                        )
+                        || (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['closed'])
+                          && request.resource.data.closed == true
+                          && request.auth.uid == resource.data.createdBy
+                        )
+                      );
         allow delete: if false;
       }
     }
 
     // --- meetings/{meetingCode} --------------------------------------------
-    // MVP-simplified: any signed-in user may update meeting docs (needed for
-    // arrayUnion-based join/leave/waiting-room flows). Tighten with a Cloud
-    // Function + transactions before a real production launch.
     match /meetings/{meetingCode} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.hostUid == request.auth.uid;
-      allow update: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.hostUid == request.auth.uid
+                    && request.resource.data.get('coHosts', []) == []
+                    && request.resource.data.get('activeParticipants', []) == []
+                    && request.resource.data.get('waitingParticipants', []) == []
+                    && request.resource.data.get('allParticipants', []) == [request.auth.uid];
+      allow update: if canUpdateMeeting();
       allow delete: if false;
 
       match /chat/{messageId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+        allow create: if isSignedIn()
+                      && request.resource.data.senderId == request.auth.uid
+                      && request.auth.uid in get(
+                        /databases/$(database)/documents/meetings/$(meetingCode)
+                      ).data.activeParticipants;
         allow update, delete: if false;
       }
 
       match /qna/{questionId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.askedBy == request.auth.uid;
-        allow update: if isSignedIn();
+        allow create: if isSignedIn()
+                      && request.resource.data.askedBy == request.auth.uid
+                      && request.auth.uid in get(
+                        /databases/$(database)/documents/meetings/$(meetingCode)
+                      ).data.activeParticipants;
+        allow update: if isSignedIn()
+                      && (
+                        (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes'])
+                          && request.auth.uid in get(
+                            /databases/$(database)/documents/meetings/$(meetingCode)
+                          ).data.activeParticipants
+                          && ownArrayChange(
+                            resource.data.get('upvotes', []),
+                            request.resource.data.get('upvotes', [])
+                          )
+                        )
+                        || (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answered'])
+                          && (
+                            request.auth.uid == get(
+                              /databases/$(database)/documents/meetings/$(meetingCode)
+                            ).data.hostUid
+                            || request.auth.uid in get(
+                              /databases/$(database)/documents/meetings/$(meetingCode)
+                            ).data.get('coHosts', [])
+                          )
+                        )
+                      );
         allow delete: if false;
       }
 
       match /polls/{pollId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if isSignedIn();
+        allow create: if isSignedIn()
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.auth.uid in get(
+                        /databases/$(database)/documents/meetings/$(meetingCode)
+                      ).data.activeParticipants
+                      && request.resource.data.get('votes', {}) == {}
+                      && request.resource.data.get('closed', false) == false;
+        allow update: if isSignedIn()
+                      && (
+                        (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes'])
+                          && request.resource.data.get('votes', {}).diff(
+                            resource.data.get('votes', {})
+                          ).affectedKeys().hasOnly([request.auth.uid])
+                          && request.auth.uid in get(
+                            /databases/$(database)/documents/meetings/$(meetingCode)
+                          ).data.activeParticipants
+                        )
+                        || (
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['closed'])
+                          && request.resource.data.closed == true
+                          && (
+                            request.auth.uid == resource.data.createdBy
+                            || request.auth.uid == get(
+                              /databases/$(database)/documents/meetings/$(meetingCode)
+                            ).data.hostUid
+                            || request.auth.uid in get(
+                              /databases/$(database)/documents/meetings/$(meetingCode)
+                            ).data.get('coHosts', [])
+                          )
+                        )
+                      );
         allow delete: if false;
       }
 
@@ -211,17 +658,79 @@ service cloud.firestore {
 
     // --- communities/{communityId} — umbrella over multiple groups --------
     match /communities/{communityId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-      // MVP-simplified like meetings: any signed-in user may update (needed
-      // for arrayUnion-based join/leave). Tighten with a Cloud Function
-      // before a real production launch.
-      allow update: if isSignedIn();
+      function isCommunityMember() {
+        return isSignedIn() && request.auth.uid in resource.data.get('members', []);
+      }
+
+      function isCommunityAdmin() {
+        return isCommunityMember() && request.auth.uid in resource.data.get('admins', []);
+      }
+
+      function canUpdateCommunity() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let members = resource.data.get('members', []);
+        let newMembers = request.resource.data.get('members', []);
+        let admins = resource.data.get('admins', []);
+        let newAdmins = request.resource.data.get('admins', []);
+        let groupIds = resource.data.get('groupIds', []);
+        let newGroupIds = request.resource.data.get('groupIds', []);
+        return (
+          isCommunityAdmin()
+          && changed.hasOnly(['name', 'description', 'photoURL', 'isPublic'])
+        ) || (
+          isCommunityAdmin()
+          && changed.hasOnly(['admins'])
+          && newAdmins.hasAll(admins)
+          && newAdmins.size() == admins.size() + 1
+          && members.hasAll(newAdmins)
+        ) || (
+          isCommunityMember()
+          && changed.hasOnly(['members', 'admins'])
+          && listRemovedOnlyByCurrentUser(members, newMembers)
+          && listUnchangedOrRemovedCurrentUser(admins, newAdmins)
+        ) || (
+          isCommunityAdmin()
+          && changed.hasOnly(['groupIds'])
+          && groupIds.hasAll(newGroupIds)
+          && groupIds.size() == newGroupIds.size() + 1
+        ) || (
+          isCommunityMember()
+          && changed.hasOnly(['groupIds'])
+          && newGroupIds.hasAll(groupIds)
+          && newGroupIds.size() == groupIds.size() + 1
+          && request.resource.data.get('groupIds', [])[groupIds.size()] is string
+          && get(
+            /databases/$(database)/documents/groups/$(request.resource.data.get('groupIds', [])[groupIds.size()])
+          ).data.createdBy == request.auth.uid
+          && get(
+            /databases/$(database)/documents/groups/$(request.resource.data.get('groupIds', [])[groupIds.size()])
+          ).data.communityId == communityId
+        );
+      }
+
+      allow get: if isSignedIn()
+                 && (resource.data.get('isPublic', false)
+                     || request.auth.uid in resource.data.get('members', []));
+      allow list: if isSignedIn()
+                  && (resource.data.get('isPublic', false)
+                      || request.auth.uid in resource.data.get('members', []));
+      allow create: if isSignedIn()
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.get('members', []) == [request.auth.uid]
+                    && request.resource.data.get('admins', []) == [request.auth.uid];
+      allow update: if canUpdateCommunity();
       allow delete: if isSignedIn() && request.auth.uid in resource.data.admins;
 
       match /announcements/{announcementId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.postedBy == request.auth.uid;
+        allow read: if isSignedIn()
+                    && request.auth.uid in get(
+                      /databases/$(database)/documents/communities/$(communityId)
+                    ).data.members;
+        allow create: if isSignedIn()
+                      && request.resource.data.postedBy == request.auth.uid
+                      && request.auth.uid in get(
+                        /databases/$(database)/documents/communities/$(communityId)
+                      ).data.admins;
         allow update, delete: if false;
       }
     }

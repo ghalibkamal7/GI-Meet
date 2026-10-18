@@ -13,11 +13,13 @@ const NAV_ITEMS = [
 export function BottomNav() {
   return (
     <nav
+      aria-label="Mobile navigation"
       style={{
         display: 'flex',
         borderTop: '1px solid var(--color-border)',
         background: 'var(--color-surface)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        padding: '6px 4px calc(6px + var(--safe-bottom))',
+        boxShadow: '0 -6px 20px rgba(11, 51, 47, 0.05)',
       }}
     >
       {NAV_ITEMS.map(({ to, label, Icon, end }) => (
@@ -31,10 +33,13 @@ export function BottomNav() {
             flexDirection: 'column',
             alignItems: 'center',
             gap: 3,
-            padding: '9px 0 7px',
-            fontSize: 10.5,
+            padding: '7px 1px 5px',
+            minHeight: 54,
+            fontSize: 10,
             fontWeight: isActive ? 600 : 500,
-            color: isActive ? 'var(--color-brand-700)' : 'var(--color-text-muted)',
+            color: isActive ? 'var(--color-brand-600)' : 'var(--color-text-muted)',
+            background: isActive ? 'var(--color-brand-100)' : 'transparent',
+            borderRadius: 10,
             textDecoration: 'none',
           })}
         >

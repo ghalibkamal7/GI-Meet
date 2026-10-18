@@ -65,7 +65,7 @@ export function ProfilePhotoEditor() {
             borderRadius: '50%',
             overflow: 'hidden',
             background: 'var(--color-brand-100)',
-            color: 'var(--color-brand-700)',
+            color: 'var(--color-brand-600)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

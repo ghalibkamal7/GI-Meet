@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 import {
   subscribeToMessages,
   subscribeToChat,
   sendMessage,
+  loadOlderMessagePage,
   deleteMessage,
   editMessage,
   toggleReaction,
@@ -27,7 +28,7 @@ import { ChatOptionsMenu } from '../../components/common/ChatOptionsMenu';
 import { uploadFile, uploadEncryptedFile } from '../../services/storageService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { usePresence } from '../../hooks/usePresence';
-import { Search, BarChart3, Phone, Video, MoreVertical, Pin, Lock } from 'lucide-react';
+import { Search, BarChart3, Phone, Video, MoreVertical, Pin, Lock, ArrowLeft } from 'lucide-react';
 import { subscribeToPolls, type Poll } from '../polls/pollService';
 import { PollCard, CreatePollModal } from '../polls/PollComponents';
 import { GiAiSummaryButton } from '../gi-ai/GiAiSummaryButton';
@@ -42,6 +43,7 @@ export function ChatWindow() {
   const { showToast } = useToast();
   const [chat, setChat] = useState<Chat | null>(null);
   const [rawMessages, setRawMessages] = useState<Message[]>([]);
+  const [olderRawMessages, setOlderRawMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   const [encryptionReady, setEncryptionReady] = useState(false);
@@ -53,15 +55,56 @@ export function ChatWindow() {
   const [searchTerm, setSearchTerm] = useState('');
   const [blocked, setBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [showPolls, setShowPolls] = useState(false);
   const [showCreatePoll, setShowCreatePoll] = useState(false);
+  const [readMeta, setReadMeta] = useState<ReadMeta | null>(null);
+  const [tabVisible, setTabVisible] = useState(() => document.visibilityState === 'visible');
+  const olderCursorRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const headerMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const activeChatIdRef = useRef<string | undefined>(chatId);
+  const loadingOlderRef = useRef(false);
+  const olderRequestRef = useRef<object | null>(null);
+  const chatGenerationRef = useRef(0);
+  const markedReadRef = useRef('');
 
   useEffect(() => {
-    if (!chatId) return;
+    activeChatIdRef.current = chatId;
+    const generation = ++chatGenerationRef.current;
+    if (!chatId) {
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setChat(null);
+    setRawMessages([]);
+    setOlderRawMessages([]);
+    setMessages([]);
+    setChatError(null);
+    setEncryptionReady(false);
+    setSharedKey(null);
+    setReadMeta(null);
+    setPolls([]);
+    setHasOlderMessages(false);
+    setLoadingOlder(false);
+    loadingOlderRef.current = false;
+    olderRequestRef.current = null;
+    markedReadRef.current = '';
+    olderCursorRef.current = null;
+
     getDoc(doc(db, 'chats', chatId)).then((snap) => {
-      if (snap.exists()) {
+      if (!active) return;
+      if (!snap.exists()) {
+        setChat(null);
+        setChatError('This chat could not be found. Return to your chats and try opening it again.');
+      } else {
         const data = snap.data();
         setChat({
           id: snap.id,
@@ -79,15 +122,37 @@ export function ChatWindow() {
         });
       }
       setLoading(false);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setChatError(error instanceof Error ? `Could not load this chat: ${error.message}` : 'Could not load this chat. Check your connection and try again.');
+      setLoading(false);
     });
 
-    const unsubscribe = subscribeToMessages(chatId, setRawMessages);
-    const unsubPolls = subscribeToPolls('chats', chatId, setPolls);
+    const unsubscribe = subscribeToMessages(
+      chatId,
+      (latestMessages, page) => {
+        if (!active) return;
+        setRawMessages(latestMessages);
+        olderCursorRef.current = page.cursor;
+        setHasOlderMessages(page.hasMore);
+        setLoading(false);
+      },
+      (error) => {
+        if (!active) return;
+        setChatError(error.message ? `Could not load messages: ${error.message}` : 'Could not load messages. Check your connection and try again.');
+        setLoading(false);
+      }
+    );
+    const unsubPolls = subscribeToPolls('chats', chatId, setPolls, (error) => {
+      if (active) setChatError(error.message ? `Could not load chat polls: ${error.message}` : 'Could not load chat polls.');
+    });
     return () => {
+      active = false;
+      if (chatGenerationRef.current === generation) chatGenerationRef.current += 1;
       unsubscribe();
       unsubPolls();
     };
-  }, [chatId]);
+  }, [chatId, retryVersion]);
 
   useEffect(() => {
     if (!chat || !profile) return;
@@ -111,8 +176,9 @@ export function ChatWindow() {
     let cancelled = false;
     const createdUrls: string[] = [];
     (async () => {
+      const allMessages = mergeMessages(olderRawMessages, rawMessages);
       const decrypted = await Promise.all(
-        rawMessages.map(async (m) => {
+        allMessages.map(async (m) => {
           let text = m.text;
           let replyTo = m.replyTo;
           let attachment = m.attachment;
@@ -151,16 +217,13 @@ export function ChatWindow() {
       cancelled = true;
       createdUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [rawMessages, sharedKey, encryptionReady]);
+  }, [rawMessages, olderRawMessages, sharedKey, encryptionReady]);
 
   // --- Read tracking ----------------------------------------------------------
   // Mark the chat as read only while it is really on screen (tab visible), and only when a message
   // newer than MY read marker exists. The live listener means a message that arrives while the chat
   // is open is marked read AFTER we saw it, so my marker is always newer than the sender's lastMessageAt.
   const myUid = profile?.uid;
-  const [readMeta, setReadMeta] = useState<ReadMeta | null>(null);
-  const [tabVisible, setTabVisible] = useState(() => document.visibilityState === 'visible');
-  const markedReadRef = useRef('');
 
   useEffect(() => {
     const onVisibilityChange = () => setTabVisible(document.visibilityState === 'visible');
@@ -171,9 +234,20 @@ export function ChatWindow() {
   useEffect(() => {
     if (!chatId) return;
     setReadMeta(null);
-    return subscribeToChat(chatId, (c) =>
-      setReadMeta(c ? { lastMessageAt: c.lastMessageAt, lastMessageSenderId: c.lastMessageSenderId, lastReadAt: c.lastReadAt } : null)
+    let active = true;
+    const unsubscribe = subscribeToChat(
+      chatId,
+      (c) => {
+        if (active) setReadMeta(c ? { lastMessageAt: c.lastMessageAt, lastMessageSenderId: c.lastMessageSenderId, lastReadAt: c.lastReadAt } : null);
+      },
+      (error) => {
+        if (active) setChatError(error.message ? `Could not refresh chat state: ${error.message}` : 'Could not refresh chat state.');
+      }
     );
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [chatId]);
 
   useEffect(() => {
@@ -188,14 +262,60 @@ export function ChatWindow() {
 
   useEffect(() => {
     if (!chat || !profile) return;
+    let active = true;
     const otherUid = chat.participants.find((p) => p !== profile.uid);
-    if (otherUid) isUserBlocked(profile.uid, otherUid).then(setBlocked);
+    if (otherUid) {
+      isUserBlocked(profile.uid, otherUid).then((isBlocked) => {
+        if (active) setBlocked(isBlocked);
+      }).catch((error: unknown) => {
+        if (active) setChatError(error instanceof Error ? `Could not check block status: ${error.message}` : 'Could not check block status.');
+      });
+    }
+    return () => {
+      active = false;
+    };
   }, [chat, profile]);
 
   const presence = usePresence(chat?.participants.find((p) => p !== profile?.uid));
 
   if (loading) return <LoadingSpinner label="Loading chat…" />;
-  if (!chat || !profile || !chatId) return <div style={{ padding: 24 }}>Chat not found.</div>;
+  if (!chat || !profile || !chatId) {
+    return (
+      <div style={{ padding: 24 }}>
+        {chatError ?? 'Chat not found.'}
+        {chatError && <button className="rb-btn rb-btn--outline" onClick={() => setRetryVersion((version) => version + 1)} style={{ marginLeft: 12 }}>Retry</button>}
+      </div>
+    );
+  }
+
+  async function handleLoadOlderMessages() {
+    const cursor = olderCursorRef.current;
+    if (!cursor || !chatId || loadingOlderRef.current) return;
+    const requestChatId = chatId;
+    const generation = chatGenerationRef.current;
+    const requestToken = {};
+    olderRequestRef.current = requestToken;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    setChatError(null);
+    try {
+      const page = await loadOlderMessagePage(requestChatId, cursor);
+      if (activeChatIdRef.current !== requestChatId || chatGenerationRef.current !== generation) return;
+      olderCursorRef.current = page.cursor;
+      setHasOlderMessages(page.hasMore);
+      setOlderRawMessages((current) => mergeMessages(current, page.messages));
+    } catch (error) {
+      if (activeChatIdRef.current === requestChatId && chatGenerationRef.current === generation) {
+        setChatError(error instanceof Error ? `Could not load older messages: ${error.message}` : 'Could not load older messages. Please try again.');
+      }
+    } finally {
+      if (olderRequestRef.current === requestToken) {
+        olderRequestRef.current = null;
+        loadingOlderRef.current = false;
+        if (activeChatIdRef.current === requestChatId && chatGenerationRef.current === generation) setLoadingOlder(false);
+      }
+    }
+  }
 
   const otherUid = chat.participants.find((p) => p !== profile.uid) ?? '';
   const otherInfo = chat.participantInfo[otherUid];
@@ -327,11 +447,11 @@ export function ChatWindow() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--color-border)' }}>
-        <button onClick={() => navigate(-1)} className="rb-desktop-hide" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>
-          ←
+      <div className="rb-chat-header" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--color-border)' }}>
+        <button onClick={() => navigate(-1)} className="rb-desktop-hide rb-btn rb-btn--outline rb-icon-btn" aria-label="Back">
+          <ArrowLeft size={17} aria-hidden="true" />
         </button>
-        <div>
+        <div className="rb-chat-header__identity">
           <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
             {otherInfo?.displayName ?? 'Unknown user'}
             {presence.visible && presence.isOnline && (
@@ -351,13 +471,56 @@ export function ChatWindow() {
             </div>
           ) : null}
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button className="rb-btn rb-btn--outline rb-icon-btn" title="Search in chat" onClick={() => setShowSearch((v) => !v)}><Search size={16} strokeWidth={1.75} /></button>
-          <button className="rb-btn rb-btn--outline rb-icon-btn" title="Polls" onClick={() => setShowPolls((v) => !v)}><BarChart3 size={16} strokeWidth={1.75} /></button>
-          <GiAiSummaryButton onGenerate={() => summarizeConversation('chats', chatId)} />
-          <button className="rb-btn rb-btn--outline rb-icon-btn" title="Voice call" onClick={() => handleStartCall('voice')} disabled={blocked}><Phone size={16} strokeWidth={1.75} /></button>
-          <button className="rb-btn rb-btn--outline rb-icon-btn" title="Video call" onClick={() => handleStartCall('video')} disabled={blocked}><Video size={16} strokeWidth={1.75} /></button>
-          <button className="rb-btn rb-btn--outline rb-icon-btn" title="Options" onClick={() => setShowOptions(true)}><MoreVertical size={16} strokeWidth={1.75} /></button>
+        <div className="rb-chat-header__actions">
+          <button className="rb-btn rb-btn--outline rb-icon-btn" aria-label="Voice call" title="Voice call" onClick={() => handleStartCall('voice')} disabled={blocked}><Phone size={17} strokeWidth={1.75} /></button>
+          <button className="rb-btn rb-btn--outline rb-icon-btn" aria-label="Video call" title="Video call" onClick={() => handleStartCall('video')} disabled={blocked}><Video size={17} strokeWidth={1.75} /></button>
+          <details
+            ref={headerMenuRef}
+            className="rb-chat-header-menu"
+            aria-label="Chat actions"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                headerMenuRef.current?.removeAttribute('open');
+                headerMenuRef.current?.querySelector('summary')?.focus();
+              }
+            }}
+          >
+            <summary className="rb-btn rb-btn--outline rb-icon-btn" aria-label="More chat actions" title="More chat actions">
+              <MoreVertical size={17} strokeWidth={1.75} />
+            </summary>
+            <div className="rb-chat-header-menu__panel rb-menu-surface">
+              <div className="rb-chat-header-menu__label">Chat tools</div>
+              <button type="button" className="rb-chat-header-menu__item" onClick={(event) => {
+                setShowSearch((visible) => !visible);
+                event.currentTarget.closest('details')?.removeAttribute('open');
+              }}>
+                <Search size={16} aria-hidden="true" />
+                <span>{showSearch ? 'Close search' : 'Search in chat'}</span>
+              </button>
+              <button type="button" className="rb-chat-header-menu__item" onClick={(event) => {
+                setShowPolls((visible) => !visible);
+                event.currentTarget.closest('details')?.removeAttribute('open');
+              }}>
+                <BarChart3 size={16} aria-hidden="true" />
+                <span>{showPolls ? 'Close polls' : 'Polls'}</span>
+              </button>
+              <div className="rb-chat-header-menu__label rb-chat-header-menu__label--separated">More</div>
+              <div className="rb-chat-header-menu__summary">
+                <GiAiSummaryButton
+                  onGenerate={() => summarizeConversation('chats', chatId)}
+                  onOpen={() => headerMenuRef.current?.removeAttribute('open')}
+                />
+                <span>Summarize conversation</span>
+              </div>
+              <button type="button" className="rb-chat-header-menu__item" onClick={(event) => {
+                setShowOptions(true);
+                event.currentTarget.closest('details')?.removeAttribute('open');
+              }}>
+                <MoreVertical size={16} aria-hidden="true" />
+                <span>Chat settings</span>
+              </button>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -404,7 +567,21 @@ export function ChatWindow() {
         </div>
       )}
 
+      {chatError && (
+        <div role="alert" style={{ padding: '8px 20px', color: 'var(--color-danger)', borderBottom: '1px solid var(--color-border)' }}>
+          {chatError}
+          <button className="rb-btn rb-btn--outline" onClick={() => setRetryVersion((version) => version + 1)} style={{ marginLeft: 12 }}>Retry</button>
+        </div>
+      )}
+
       <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+        {hasOlderMessages && !showSearch && (
+          <div style={{ textAlign: 'center', marginBottom: 12 }}>
+            <button className="rb-btn rb-btn--outline" onClick={handleLoadOlderMessages} disabled={loadingOlder}>
+              {loadingOlder ? 'Loading older messages…' : 'Load older messages'}
+            </button>
+          </div>
+        )}
         {(showSearch && searchTerm ? searchResults : messages).map((m) => (
           <MessageBubble
             key={m.id}
@@ -465,5 +642,15 @@ export function ChatWindow() {
         />
       )}
     </div>
+  );
+}
+
+function mergeMessages(...messageLists: Message[][]): Message[] {
+  const uniqueMessages = new Map<string, Message>();
+  for (const list of messageLists) {
+    for (const message of list) uniqueMessages.set(message.id, message);
+  }
+  return [...uniqueMessages.values()].sort(
+    (left, right) => left.createdAt - right.createdAt || right.id.localeCompare(left.id)
   );
 }

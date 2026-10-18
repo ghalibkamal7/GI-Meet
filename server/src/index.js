@@ -5,6 +5,7 @@ import livekitRoutes from './routes/livekit.js';
 import meetingRoutes from './routes/meetings.js';
 import youtubeRoutes from './routes/youtube.js';
 import giAiRoutes from './routes/giAi.js';
+import invitationRoutes from './routes/invitations.js';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -18,6 +19,7 @@ app.use('/api/livekit', livekitRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/gi-ai', giAiRoutes);
+app.use('/api/invitations', invitationRoutes);
 
 app.use((err, _req, res, _next) => {
   // eslint-disable-next-line no-console

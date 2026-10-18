@@ -31,7 +31,7 @@ export function CreatePollModal({
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 360, padding: 20 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Create poll" style={{ width: 360, padding: 20 }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 12 }}>Create poll</h3>
         <input className="rb-input" placeholder="Question" value={question} onChange={(e) => setQuestion(e.target.value)} style={{ marginBottom: 10 }} />
         {options.map((opt, i) => (

@@ -16,7 +16,7 @@ export function DeviceSettingsModal({ room, onClose }: { room: Room; onClose: ()
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 340, padding: 20 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Device settings" style={{ width: 340, padding: 20 }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 14 }}>Device settings</h3>
 
         <label style={{ fontSize: 12, fontWeight: 600 }}>Microphone</label>

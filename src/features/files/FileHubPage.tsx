@@ -52,7 +52,7 @@ export function FileHubPage() {
   });
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="rb-page">
       <h1 style={{ fontSize: 22, marginBottom: 16 }}>File Hub</h1>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>

@@ -25,6 +25,7 @@ export function MeetingChatPanel({ meetingCode, onClose }: { meetingCode: string
 
   return (
     <div
+      className="rb-meeting-panel"
       style={{
         width: 300,
         background: 'var(--color-surface)',
@@ -45,7 +46,7 @@ export function MeetingChatPanel({ meetingCode, onClose }: { meetingCode: string
       <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
         {messages.map((m) => (
           <div key={m.id} style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-brand-700)' }}>{m.senderName}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-brand-600)' }}>{m.senderName}</div>
             <div style={{ fontSize: 14 }}>{m.text}</div>
           </div>
         ))}

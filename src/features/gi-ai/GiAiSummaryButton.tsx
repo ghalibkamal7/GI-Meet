@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 
-export function GiAiSummaryButton({ onGenerate }: { onGenerate: () => Promise<string> }) {
+export function GiAiSummaryButton({ onGenerate, onOpen }: { onGenerate: () => Promise<string>; onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
@@ -9,6 +9,7 @@ export function GiAiSummaryButton({ onGenerate }: { onGenerate: () => Promise<st
 
   async function handleOpen() {
     setOpen(true);
+    onOpen?.();
     setLoading(true);
     setError(null);
     try {
@@ -22,13 +23,13 @@ export function GiAiSummaryButton({ onGenerate }: { onGenerate: () => Promise<st
 
   return (
     <>
-      <button className="rb-btn rb-btn--outline rb-icon-btn" title="Summarize with GI" onClick={handleOpen}>
+      <button className="rb-btn rb-btn--outline rb-icon-btn" title="Summarize with GI" aria-label="Summarize conversation with GI" onClick={handleOpen}>
         <Sparkles size={16} strokeWidth={1.75} />
       </button>
       {open && (
         <div style={overlayStyle} onClick={() => setOpen(false)}>
-          <div className="rb-card" style={{ width: 420, padding: 20, maxHeight: '70vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-labelledby="gi-summary-title" style={{ width: 420, padding: 20, maxHeight: '70vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <h3 id="gi-summary-title" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Sparkles size={18} strokeWidth={1.75} color="var(--color-accent)" /> GI summary
             </h3>
             {loading && <p style={{ color: 'var(--color-text-muted)' }}>Summarizing…</p>}

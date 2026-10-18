@@ -23,7 +23,7 @@ export function DiscoverCommunitiesModal({ onClose }: { onClose: () => void }) {
   async function handleJoin(community: Community) {
     if (!profile) return;
     setJoiningId(community.id);
-    await joinCommunity(community.id, profile.uid, { displayName: profile.displayName, photoURL: profile.photoURL });
+    await joinCommunity(community.id);
     setJoiningId(null);
     onClose();
     navigate(`/communities/${community.id}`);
@@ -31,7 +31,7 @@ export function DiscoverCommunitiesModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 400, padding: 20, maxHeight: '75vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Discover communities" style={{ width: 400, padding: 20, maxHeight: '75vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 14 }}>Discover communities</h3>
 
         {loading && <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>Loading…</p>}

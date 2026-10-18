@@ -9,7 +9,7 @@ import { isNativePlatform } from '../../utils/platform';
 interface Props {
   replyingTo: Message | null;
   onCancelReply: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string) => void | Promise<void>;
   onSendFile?: (file: File) => void;
   onSendVoice?: (blob: Blob, durationSeconds: number) => void;
   onTypingChange?: (isTyping: boolean) => void;
@@ -27,22 +27,36 @@ export function MessageComposer({
 }: Props) {
   const [text, setText] = useState('');
   const [fileError, setFileError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const sendingRef = useRef(false);
 
   function handleChange(value: string) {
     setText(value);
+    setSendError(null);
     onTypingChange?.(true);
     clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(() => onTypingChange?.(false), 2000);
   }
 
-  function handleSubmit() {
-    if (!text.trim()) return;
-    onSend(text);
-    setText('');
-    onTypingChange?.(false);
+  async function handleSubmit() {
+    if (!text.trim() || sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    setSendError(null);
+    try {
+      await onSend(text);
+      setText('');
+      onTypingChange?.(false);
+    } catch (error) {
+      setSendError(error instanceof Error ? `Message not sent: ${error.message}` : 'Message not sent. Please try again.');
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -115,7 +129,11 @@ export function MessageComposer({
         </div>
       )}
 
-      {fileError && <p className="rb-error-text" style={{ margin: '0 0 8px' }}>{fileError}</p>}
+      {(fileError || sendError) && (
+        <p className="rb-error-text" role="alert" style={{ margin: '0 0 8px' }}>
+          {sendError ?? fileError}
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <div style={{ position: 'relative' }}>
@@ -148,14 +166,16 @@ export function MessageComposer({
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
+          disabled={sending}
         />
 
         {text.trim() ? (
           <button
             className="rb-btn rb-btn--primary"
             onClick={handleSubmit}
+            disabled={sending}
             style={{ width: 40, height: 40, padding: 0, borderRadius: '50%', flexShrink: 0 }}
-            aria-label="Send"
+            aria-label={sending ? 'Sending message' : 'Send'}
           >
             <SendHorizontal size={17} strokeWidth={2} />
           </button>

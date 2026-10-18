@@ -61,7 +61,7 @@ export function ScheduleMeetingModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 380, padding: 20, maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Schedule meeting" style={{ width: 380, padding: 20, maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 14 }}>Schedule meeting</h3>
 
         <input className="rb-input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ marginBottom: 10 }} />
@@ -77,7 +77,7 @@ export function ScheduleMeetingModal({ onClose }: { onClose: () => void }) {
         {invited.size > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {Array.from(invited.values()).map((u) => (
-              <span key={u.uid} onClick={() => toggleInvite(u)} style={{ fontSize: 12, background: 'var(--color-brand-100)', color: 'var(--color-brand-700)', padding: '4px 8px', borderRadius: 999, cursor: 'pointer' }}>
+              <span key={u.uid} onClick={() => toggleInvite(u)} style={{ fontSize: 12, background: 'var(--color-brand-100)', color: 'var(--color-brand-600)', padding: '4px 8px', borderRadius: 999, cursor: 'pointer' }}>
                 {u.displayName} ✕
               </span>
             ))}

@@ -44,7 +44,7 @@ export function HostControlsPanel({ meetingCode, room, meeting, onClose, onMeeti
   }
 
   return (
-    <div style={{ width: 300, background: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+    <div className="rb-meeting-panel" style={{ width: 300, background: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottom: '1px solid var(--color-border)' }}>
         <strong>Host controls</strong>
         <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', display: 'flex', color: 'var(--color-text-muted)' }} aria-label="Close"><X size={17} strokeWidth={1.75} /></button>

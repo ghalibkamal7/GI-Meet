@@ -54,7 +54,7 @@ export function GoLiveModal({ meetingCode, onClose, onStarted }: Props) {
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 380, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Start live stream" style={{ width: 380, padding: 24 }} onClick={(e) => e.stopPropagation()}>
         {step === 'form' ? (
           <>
             <h3 style={{ marginBottom: 16 }}>Start YouTube Live</h3>

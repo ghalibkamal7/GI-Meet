@@ -39,7 +39,7 @@ export function MeetingsPage() {
   const grouped = groupByDay(history);
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="rb-page rb-meetings-page">
       <h1 style={{ fontSize: 22, marginBottom: 20 }}>Meetings</h1>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>

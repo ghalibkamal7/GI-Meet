@@ -42,6 +42,7 @@ export function LoginPage() {
 
   return (
     <div
+      className="rb-auth-screen"
       style={{
         minHeight: '100%',
         display: 'flex',
@@ -52,7 +53,7 @@ export function LoginPage() {
           'radial-gradient(ellipse at top, var(--color-brand-100) 0%, var(--color-bg) 55%)',
       }}
     >
-      <div className="rb-card" style={{ width: '100%', maxWidth: 400, padding: 32, boxShadow: 'var(--shadow-md)' }}>
+      <div className="rb-card rb-auth-card" style={{ width: '100%', maxWidth: 420, padding: 32, boxShadow: 'var(--shadow-md)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
           <BrandMark size={40} />
         </div>

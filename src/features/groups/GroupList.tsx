@@ -69,7 +69,7 @@ export function GroupList() {
   const visibleGroups = groups.filter((g) => !g.communityId); // sub-groups show inside their community, not here
 
   return (
-    <div style={{ padding: '20px 0' }}>
+    <div className="rb-list-page">
       <div style={{ padding: '0 20px 12px' }}>
         <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-alt)', borderRadius: 10, padding: 3, width: 'fit-content' }}>
           <button onClick={() => setTab('groups')} style={tabBtnStyle(tab === 'groups')}>Groups</button>
@@ -155,7 +155,7 @@ function tabBtnStyle(active: boolean): React.CSSProperties {
     borderRadius: 8,
     border: 'none',
     background: active ? 'var(--color-surface)' : 'transparent',
-    color: active ? 'var(--color-brand-700)' : 'var(--color-text-muted)',
+    color: active ? 'var(--color-brand-600)' : 'var(--color-text-muted)',
     fontWeight: active ? 600 : 500,
     fontSize: 13.5,
     cursor: 'pointer',

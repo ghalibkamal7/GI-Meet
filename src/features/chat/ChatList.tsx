@@ -178,7 +178,7 @@ useEffect(() => {
   });
 
   return (
-    <div style={{ padding: '20px 0' }}>
+    <div className="rb-list-page" style={{ padding: '20px 0' }}>
 
   {(incomingRequests.length > 0 || outgoingRequests.length > 0 || requestError) && (
     <section style={{ padding: '0 20px 16px' }}>
@@ -293,7 +293,7 @@ useEffect(() => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 600,
-                color: 'var(--color-brand-700)',
+                color: 'var(--color-brand-600)',
                 flexShrink: 0,
                 overflow: 'hidden',
               }}
@@ -318,7 +318,7 @@ useEffect(() => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {isTyping ? 'typing…' : chat.lastMessageCipher ? <ChatPreviewText chat={chat} /> : neutralizePreview(chat.lastMessage) || 'Say hello 👋'}
+                {isTyping ? 'typing…' : chat.lastMessageCipher ? <ChatPreviewText chat={chat} /> : neutralizePreview(chat.lastMessage) || 'Say hello'}
               </div>
             </div>
             {unread > 0 && !isMuted && (

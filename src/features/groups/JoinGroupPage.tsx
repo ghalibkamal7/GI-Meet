@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getGroupByInviteCode, joinGroupByInviteCode } from './groupService';
-import type { Group } from './groupTypes';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
+import type { GroupInvitePreview } from '../../services/invitationService';
 
 export function JoinGroupPage() {
   const { inviteCode } = useParams<{ inviteCode: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [group, setGroup] = useState<Group | null>(null);
+  const [group, setGroup] = useState<GroupInvitePreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,14 +23,14 @@ export function JoinGroupPage() {
     });
   }, [inviteCode]);
 
-  const alreadyMember = Boolean(group && profile && group.members.includes(profile.uid));
+  const alreadyMember = group?.alreadyMember ?? false;
 
   async function handleJoin() {
     if (!profile || !inviteCode) return;
     setJoining(true);
-    const joined = await joinGroupByInviteCode(inviteCode, profile.uid, { displayName: profile.displayName, photoURL: profile.photoURL });
+    const joinedId = await joinGroupByInviteCode(inviteCode);
     setJoining(false);
-    if (joined) navigate(`/groups/${joined.id}`);
+    if (joinedId) navigate(`/groups/${joinedId}`);
     else setError('Could not join this group.');
   }
 
@@ -49,7 +49,7 @@ export function JoinGroupPage() {
             <h2 style={{ marginBottom: 8 }}>{group?.name}</h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 4 }}>{group?.description}</p>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 20 }}>
-              {group?.members.length} members
+              {group?.membersCount} members
             </p>
             {alreadyMember ? (
               <button className="rb-btn rb-btn--primary" style={{ width: '100%' }} onClick={() => navigate(`/groups/${group!.id}`)}>

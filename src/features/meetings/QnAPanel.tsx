@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { ThumbsUp, X } from 'lucide-react';
 import { subscribeToQuestions, askQuestion, toggleUpvote, markAnswered, type Question } from './qnaService';
 
 export function QnAPanel({ meetingCode, currentUid, currentName, isHost, onClose }: { meetingCode: string; currentUid: string; currentName: string; isHost: boolean; onClose: () => void }) {
@@ -15,7 +15,7 @@ export function QnAPanel({ meetingCode, currentUid, currentName, isHost, onClose
   }
 
   return (
-    <div style={{ width: 300, background: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className="rb-meeting-panel" style={{ width: 300, background: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottom: '1px solid var(--color-border)' }}>
         <strong>Q&A</strong>
         <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', display: 'flex', color: 'var(--color-text-muted)' }} aria-label="Close"><X size={17} strokeWidth={1.75} /></button>
@@ -31,8 +31,12 @@ export function QnAPanel({ meetingCode, currentUid, currentName, isHost, onClose
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
                 <span>{q.askedByName}{q.answered ? ' · Answered' : ''}</span>
                 <span style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => toggleUpvote(meetingCode, q.id, currentUid, upvoted)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: upvoted ? 'var(--color-brand-600)' : 'inherit' }}>
-                    ▲ {q.upvotes.length}
+                  <button
+                    onClick={() => toggleUpvote(meetingCode, q.id, currentUid, upvoted)}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: upvoted ? 'var(--color-brand-600)' : 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    aria-label={`${upvoted ? 'Remove upvote' : 'Upvote'} question, ${q.upvotes.length} votes`}
+                  >
+                    <ThumbsUp size={13} aria-hidden="true" /> {q.upvotes.length}
                   </button>
                   {isHost && !q.answered && (
                     <button onClick={() => markAnswered(meetingCode, q.id, true)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>

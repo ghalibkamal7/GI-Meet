@@ -85,8 +85,8 @@ export function ProfileSetup() {
   }
 
   return (
-    <div style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div className="rb-card" style={{ width: '100%', maxWidth: 420, padding: 32 }}>
+    <div className="rb-auth-screen" style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'radial-gradient(ellipse at top, var(--color-brand-100) 0%, var(--color-bg) 55%)' }}>
+      <div className="rb-card rb-auth-card" style={{ width: '100%', maxWidth: 420, padding: 32 }}>
         <h1 style={{ fontSize: 24, marginBottom: 4 }}>Set up your profile</h1>
         <p style={{ color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 24 }}>Pick a username people can find you by.</p>
 

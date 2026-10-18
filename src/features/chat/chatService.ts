@@ -16,8 +16,10 @@ import {
   arrayRemove,
   where,
   getDocs,
+  runTransaction,
   type QueryDocumentSnapshot,
   type DocumentData,
+  type DocumentReference,
 } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import type { Chat, Message } from './chatTypes';
@@ -81,10 +83,16 @@ export function subscribeToUserChats(uid: string, callback: (chats: Chat[]) => v
 }
 
 /** Live view of ONE chat document (read markers, last message, ...). */
-export function subscribeToChat(chatId: string, callback: (chat: Chat | null) => void): () => void {
-  return onSnapshot(doc(db, 'chats', chatId), (snap) => {
-    callback(snap.exists() ? docToChat(snap as QueryDocumentSnapshot<DocumentData>) : null);
-  });
+export function subscribeToChat(
+  chatId: string,
+  callback: (chat: Chat | null) => void,
+  onError?: (error: Error) => void
+): () => void {
+  return onSnapshot(
+    doc(db, 'chats', chatId),
+    (snap) => callback(snap.exists() ? docToChat(snap as QueryDocumentSnapshot<DocumentData>) : null),
+    onError
+  );
 }
 
 function docToChat(d: QueryDocumentSnapshot<DocumentData>): Chat {
@@ -109,23 +117,47 @@ function docToChat(d: QueryDocumentSnapshot<DocumentData>): Chat {
   };
 }
 
-export function subscribeToMessages(chatId: string, callback: (messages: Message[]) => void) {
+export interface MessagePage {
+  messages: Message[];
+  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  hasMore: boolean;
+}
+
+export function subscribeToMessages(
+  chatId: string,
+  callback: (messages: Message[], page: Pick<MessagePage, 'cursor' | 'hasMore'>) => void,
+  onError?: (error: Error) => void
+) {
   const q = query(
     collection(db, 'chats', chatId, 'messages'),
     orderBy('createdAt', 'desc'),
     limit(MESSAGES_PAGE_SIZE)
   );
 
-  return onSnapshot(q, (snap) => {
-    const messages = snap.docs.map(docToMessage).reverse();
-    callback(messages);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const messages = snap.docs.map(docToMessage).reverse();
+      callback(messages, {
+        cursor: snap.docs[snap.docs.length - 1] ?? null,
+        hasMore: snap.docs.length === MESSAGES_PAGE_SIZE,
+      });
+    },
+    onError
+  );
 }
 
 export async function loadOlderMessages(
   chatId: string,
   oldestLoaded: QueryDocumentSnapshot<DocumentData>
 ): Promise<Message[]> {
+  return (await loadOlderMessagePage(chatId, oldestLoaded)).messages;
+}
+
+export async function loadOlderMessagePage(
+  chatId: string,
+  oldestLoaded: QueryDocumentSnapshot<DocumentData>
+): Promise<MessagePage> {
   const q = query(
     collection(db, 'chats', chatId, 'messages'),
     orderBy('createdAt', 'desc'),
@@ -133,11 +165,32 @@ export async function loadOlderMessages(
     limit(MESSAGES_PAGE_SIZE)
   );
   const snap = await getDocs(q);
-  return snap.docs.map(docToMessage).reverse();
+  return {
+    messages: snap.docs.map(docToMessage).reverse(),
+    cursor: snap.docs[snap.docs.length - 1] ?? null,
+    hasMore: snap.docs.length === MESSAGES_PAGE_SIZE,
+  };
 }
 
 function docToMessage(d: QueryDocumentSnapshot<DocumentData>): Message {
   const data = d.data();
+  const reactions: Record<string, string[]> = Object.fromEntries(
+    Object.entries(data.reactions ?? {}).map(([emoji, uids]) => [
+      emoji,
+      Array.isArray(uids) ? [...uids] : [],
+    ])
+  );
+  const reactionUsers = data.reactionUsers ?? {};
+  for (const [uid, emojis] of Object.entries(reactionUsers)) {
+    for (const [emoji, uids] of Object.entries(reactions)) {
+      reactions[emoji] = uids.filter((reactingUid) => reactingUid !== uid);
+    }
+    if (Array.isArray(emojis)) {
+      for (const emoji of emojis) {
+        reactions[emoji] = [...(reactions[emoji] ?? []), uid];
+      }
+    }
+  }
   return {
     id: d.id,
     chatId: data.chatId,
@@ -150,7 +203,7 @@ function docToMessage(d: QueryDocumentSnapshot<DocumentData>): Message {
     forwardedFrom: data.forwardedFrom ?? null,
     deleted: Boolean(data.deleted),
     attachment: data.attachment ?? null,
-    reactions: data.reactions ?? {},
+    reactions,
     starredBy: data.starredBy ?? [],
     encrypted: Boolean(data.encrypted),
     iv: data.iv ?? null,
@@ -182,6 +235,7 @@ export async function sendMessage(params: {
     deleted: false,
     attachment: params.attachment ?? null,
     reactions: {},
+    reactionUsers: {},
     starredBy: [],
     encrypted: Boolean(params.encrypted),
     iv: params.iv ?? null,
@@ -237,9 +291,33 @@ export async function deleteMessage(chatId: string, messageId: string): Promise<
 }
 
 export async function toggleReaction(chatId: string, messageId: string, emoji: string, uid: string, alreadyReacted: boolean): Promise<void> {
-  const field = `reactions.${emoji}`;
-  await updateDoc(doc(db, 'chats', chatId, 'messages', messageId), {
-    [field]: alreadyReacted ? arrayRemove(uid) : arrayUnion(uid),
+  await toggleMessageReaction(doc(db, 'chats', chatId, 'messages', messageId), emoji, uid, alreadyReacted);
+}
+
+export async function toggleMessageReaction(
+  messageRef: DocumentReference,
+  emoji: string,
+  uid: string,
+  alreadyReacted: boolean
+): Promise<void> {
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(messageRef);
+    if (!snapshot.exists()) throw new Error('Message not found.');
+    const data = snapshot.data();
+    const userReactions = data.reactionUsers?.[uid];
+    const legacyReactions = data.reactions ?? {};
+    const current = Array.isArray(userReactions)
+      ? userReactions
+      : Object.entries(legacyReactions)
+        .filter(([, uids]) => Array.isArray(uids) && uids.includes(uid))
+        .map(([reaction]) => reaction);
+    const next = alreadyReacted
+      ? current.filter((reaction) => reaction !== emoji)
+      : current.includes(emoji)
+        ? current
+        : [...current, emoji];
+
+    transaction.update(messageRef, { [`reactionUsers.${uid}`]: next });
   });
 }
 

@@ -3,7 +3,7 @@ import type { Meeting } from './meetingTypes';
 export function MeetingInfoModal({ meeting, participantCount, onClose }: { meeting: Meeting; participantCount: number; onClose: () => void }) {
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 340, padding: 20 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Meeting information" style={{ width: 340, padding: 20 }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 12 }}>Meeting info</h3>
         <InfoRow label="Meeting ID" value={meeting.id} mono />
         <InfoRow label="Title" value={meeting.title} />

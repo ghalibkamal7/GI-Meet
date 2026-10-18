@@ -44,7 +44,7 @@ export function GroupInfoPanel({ group, currentUid, onClose, onLeft }: Props) {
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 380, padding: 20, maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Group information" style={{ width: 380, padding: 20, maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 16 }}>Group info</h3>
 
         {canManage ? (

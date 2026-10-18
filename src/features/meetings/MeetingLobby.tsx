@@ -88,10 +88,11 @@ export function MeetingLobby() {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24 }}>
+    <div className="rb-meeting-lobby" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 24, overflowY: 'auto' }}>
       <h2>Ready to join?</h2>
 
       <div
+        className="rb-meeting-code"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -118,6 +119,7 @@ export function MeetingLobby() {
 
       {!meeting?.isAudioOnly && (
         <div
+          className="rb-meeting-preview"
           style={{
             width: 360,
             height: 240,
@@ -137,7 +139,7 @@ export function MeetingLobby() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div className="rb-meeting-lobby__controls" style={{ display: 'flex', gap: 10 }}>
         <button className={`rb-btn ${micOn ? 'rb-btn--primary' : 'rb-btn--outline'}`} onClick={() => setMicOn((v) => !v)} style={btnWithIcon}>
           {micOn ? <Mic size={16} strokeWidth={1.75} /> : <MicOff size={16} strokeWidth={1.75} />} {micOn ? 'Mic on' : 'Mic off'}
         </button>

@@ -34,6 +34,7 @@ import {
   Info,
   Copy,
   Smile,
+  Loader2,
 } from 'lucide-react';
 
 type Panel = 'none' | 'chat' | 'host' | 'qna';
@@ -240,12 +241,12 @@ export function MeetingRoom() {
   const isLive = liveState?.status === 'live';
 
   return (
-    <div style={{ height: '100%', display: 'flex' }}>
+    <div className="rb-meeting-room" style={{ height: '100%', display: 'flex', position: 'relative', overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: '#0b0f0e' }}>
         {isLive && <LiveIndicatorBanner />}
         {reconnecting && (
-          <div style={{ position: 'absolute', top: isLive ? 32 : 0, left: 0, right: 0, background: 'var(--color-accent)', color: '#1a1400', textAlign: 'center', fontSize: 12, fontWeight: 600, padding: '4px 0', zIndex: 55 }}>
-            🟡 Reconnecting…
+          <div role="status" aria-live="polite" style={{ position: 'absolute', top: isLive ? 32 : 0, left: 0, right: 0, background: 'var(--color-accent)', color: '#1a1400', textAlign: 'center', fontSize: 12, fontWeight: 600, padding: '4px 0', zIndex: 55 }}>
+            <Loader2 className="rb-spin" size={14} aria-hidden="true" style={{ verticalAlign: 'middle', marginRight: 6 }} /> Reconnecting…
           </div>
         )}
         {!isLive && (
@@ -281,6 +282,7 @@ export function MeetingRoom() {
         <style>{`@keyframes rb-float-up { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-140px); opacity: 0; } }`}</style>
 
         <div
+          className="rb-meeting-participant-grid"
           style={{
             flex: 1,
             display: 'grid',
@@ -288,6 +290,7 @@ export function MeetingRoom() {
             gap: 12,
             padding: isLive ? '40px 16px 16px' : 16,
             alignContent: 'center',
+            overflowY: 'auto',
           }}
         >
           <ParticipantTile participant={room.localParticipant} isLocal handRaised={myHandRaised} />
@@ -296,44 +299,44 @@ export function MeetingRoom() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '14px 0', background: 'rgba(0,0,0,0.3)', flexWrap: 'wrap' }}>
-          <button onClick={handleToggleMic} style={ctrlBtn(!micOn)} title={micOn ? 'Mute mic' : 'Unmute mic'}>
+        <div className="rb-meeting-controls" style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '14px 0', background: 'rgba(0,0,0,0.3)', flexWrap: 'wrap' }}>
+          <button onClick={handleToggleMic} style={ctrlBtn(!micOn)} title={micOn ? 'Mute mic' : 'Unmute mic'} aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}>
             {micOn ? <Mic size={19} strokeWidth={1.75} /> : <MicOff size={19} strokeWidth={1.75} />}
           </button>
           {!meeting.isAudioOnly && (
-            <button onClick={handleToggleCamera} style={ctrlBtn(!cameraOn)} title={cameraOn ? 'Turn off camera' : 'Turn on camera'}>
+            <button onClick={handleToggleCamera} style={ctrlBtn(!cameraOn)} title={cameraOn ? 'Turn off camera' : 'Turn on camera'} aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}>
               {cameraOn ? <VideoIcon size={19} strokeWidth={1.75} /> : <VideoOff size={19} strokeWidth={1.75} />}
             </button>
           )}
           {!meeting.isAudioOnly && (
-            <button onClick={handleToggleScreenShare} style={ctrlBtn(!screenSharing)} title="Share screen">
+            <button onClick={handleToggleScreenShare} style={ctrlBtn(!screenSharing)} title="Share screen" aria-label="Share screen">
               <ScreenShare size={19} strokeWidth={1.75} />
             </button>
           )}
-          <button onClick={handleToggleRaiseHand} style={ctrlBtn(!myHandRaised)} title="Raise hand">
+          <button onClick={handleToggleRaiseHand} style={ctrlBtn(!myHandRaised)} title="Raise hand" aria-label={myHandRaised ? 'Lower hand' : 'Raise hand'}>
             <Hand size={19} strokeWidth={1.75} />
           </button>
           <ReactionButton onReact={handleReact} />
-          <button onClick={() => setShowDeviceSettings(true)} style={ctrlBtn(true)} title="Device settings">
+          <button onClick={() => setShowDeviceSettings(true)} style={ctrlBtn(true)} title="Device settings" aria-label="Device settings">
             <Settings2 size={19} strokeWidth={1.75} />
           </button>
-          <button onClick={() => setPanel(panel === 'chat' ? 'none' : 'chat')} style={ctrlBtn(panel !== 'chat')} title="Meeting chat">
+          <button onClick={() => setPanel(panel === 'chat' ? 'none' : 'chat')} style={ctrlBtn(panel !== 'chat')} title="Meeting chat" aria-label={panel === 'chat' ? 'Close meeting chat' : 'Open meeting chat'}>
             <MessageSquare size={19} strokeWidth={1.75} />
           </button>
-          <button onClick={() => setPanel(panel === 'qna' ? 'none' : 'qna')} style={ctrlBtn(panel !== 'qna')} title="Q&A">
+          <button onClick={() => setPanel(panel === 'qna' ? 'none' : 'qna')} style={ctrlBtn(panel !== 'qna')} title="Q&A" aria-label={panel === 'qna' ? 'Close Q&A' : 'Open Q&A'}>
             <HelpCircle size={19} strokeWidth={1.75} />
           </button>
           {isHostOrCoHost && (
-            <button onClick={() => setPanel(panel === 'host' ? 'none' : 'host')} style={ctrlBtn(panel !== 'host')} title="Host controls">
+            <button onClick={() => setPanel(panel === 'host' ? 'none' : 'host')} style={ctrlBtn(panel !== 'host')} title="Host controls" aria-label={panel === 'host' ? 'Close host controls' : 'Open host controls'}>
               <Users size={19} strokeWidth={1.75} />
             </button>
           )}
           {isHost && (!liveState || liveState.status === 'not_connected' || liveState.status === 'ended') && (
-            <button onClick={() => setShowGoLive(true)} style={{ ...ctrlBtn(false), background: 'var(--color-danger)', width: 'auto', padding: '0 16px', display: 'flex', alignItems: 'center', gap: 7 }} title="Go live on YouTube">
+            <button onClick={() => setShowGoLive(true)} style={{ ...ctrlBtn(false), background: 'var(--color-danger)', width: 'auto', padding: '0 16px', display: 'flex', alignItems: 'center', gap: 7 }} title="Go live on YouTube" aria-label="Go live on YouTube">
               <Radio size={17} strokeWidth={1.75} /> Go Live
             </button>
           )}
-          <button onClick={isHost ? () => setShowEndConfirm(true) : handleLeave} style={{ ...ctrlBtn(false), background: 'var(--color-danger)' }} title="Leave meeting">
+          <button onClick={isHost ? () => setShowEndConfirm(true) : handleLeave} style={{ ...ctrlBtn(false), background: 'var(--color-danger)' }} title="Leave meeting" aria-label={isHost ? 'End meeting' : 'Leave meeting'}>
             <PhoneOff size={19} strokeWidth={1.75} />
           </button>
         </div>
@@ -381,13 +384,13 @@ function ReactionButton({ onReact }: { onReact: (emoji: string) => void }) {
   const emojis = ['👍', '❤️', '😂', '👏', '🎉'];
   return (
     <div style={{ position: 'relative' }}>
-      <button onClick={() => setOpen((v) => !v)} style={ctrlBtn(true)} title="Send a reaction">
+      <button onClick={() => setOpen((v) => !v)} style={ctrlBtn(true)} title="Send a reaction" aria-label="Send a reaction">
         <Smile size={19} strokeWidth={1.75} />
       </button>
       {open && (
         <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 8, background: 'var(--color-surface)', borderRadius: 12, padding: 6, display: 'flex', gap: 4, boxShadow: 'var(--shadow-md)' }}>
           {emojis.map((e) => (
-            <button key={e} onClick={() => { onReact(e); setOpen(false); }} style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer' }}>{e}</button>
+            <button key={e} onClick={() => { onReact(e); setOpen(false); }} style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer' }} aria-label={`React with ${e}`}>{e}</button>
           ))}
         </div>
       )}

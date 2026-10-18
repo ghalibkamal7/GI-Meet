@@ -78,7 +78,7 @@ export function CreateGroupModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 400, padding: 20, maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Create group" style={{ width: 400, padding: 20, maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 16 }}>New group</h3>
 
         <input
@@ -117,7 +117,7 @@ export function CreateGroupModal({ onClose }: { onClose: () => void }) {
                 style={{
                   fontSize: 12,
                   background: 'var(--color-brand-100)',
-                  color: 'var(--color-brand-700)',
+                  color: 'var(--color-brand-600)',
                   padding: '4px 8px',
                   borderRadius: 999,
                   cursor: 'pointer',

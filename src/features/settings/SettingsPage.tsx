@@ -55,12 +55,16 @@ export function SettingsPage() {
   ];
 
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
-      <div style={{ width: 190, borderRight: '1px solid var(--color-border)', padding: 16 }}>
+    <div className="rb-settings-layout">
+      <div className="rb-settings-nav" role="tablist" aria-label="Settings sections">
         {TABS.map((t) => (
           <button
             key={t.id}
+            id={`settings-tab-${t.id}`}
             onClick={() => setTab(t.id)}
+            role="tab"
+            aria-selected={tab === t.id}
+            aria-controls="settings-panel"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -72,19 +76,19 @@ export function SettingsPage() {
               border: 'none',
               marginBottom: 2,
               background: tab === t.id ? 'var(--color-brand-100)' : 'transparent',
-              color: tab === t.id ? 'var(--color-brand-700)' : 'var(--color-text)',
+              color: tab === t.id ? 'var(--color-brand-600)' : 'var(--color-text)',
               fontWeight: tab === t.id ? 600 : 500,
               fontSize: 14,
               cursor: 'pointer',
             }}
           >
-            <t.Icon size={16} strokeWidth={1.75} />
+            <t.Icon size={16} strokeWidth={1.75} aria-hidden="true" />
             {t.label}
           </button>
         ))}
       </div>
 
-      <div style={{ flex: 1, padding: 28, maxWidth: 480 }}>
+      <div className="rb-settings-panel" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
         {tab === 'account' && (
           <>
             <h2 style={{ fontSize: 18, marginBottom: 16 }}>Account</h2>

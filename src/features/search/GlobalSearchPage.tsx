@@ -35,7 +35,7 @@ export function GlobalSearchPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="rb-page rb-page--narrow">
       <h1 style={{ fontSize: 22, marginBottom: 16 }}>Search</h1>
       <input
         className="rb-input"
@@ -48,7 +48,7 @@ export function GlobalSearchPage() {
 
       {loading && <p style={{ color: 'var(--color-text-muted)' }}>Searching…</p>}
       {!loading && term.length >= 2 && users.length === 0 && (
-        <p style={{ color: 'var(--color-text-muted)' }}>No people found. To search inside a specific chat, open that chat and use the 🔍 icon there.</p>
+        <p style={{ color: 'var(--color-text-muted)' }}>No people found. To search inside a specific chat, open it and select “Search in chat” from the chat actions menu.</p>
       )}
 
       {users.map((user) => (
@@ -78,7 +78,7 @@ export function GlobalSearchPage() {
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 600,
-              color: 'var(--color-brand-700)',
+              color: 'var(--color-brand-600)',
             }}
           >
             {user.displayName.charAt(0).toUpperCase()}

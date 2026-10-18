@@ -50,7 +50,7 @@ export function AddMemberModal({ groupId, existingMemberUids, onClose }: Props) 
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 360, padding: 20 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Add group members" style={{ width: 360, padding: 20 }} onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginBottom: 12 }}>Add member</h3>
         <input
           className="rb-input"
@@ -78,7 +78,7 @@ export function AddMemberModal({ groupId, existingMemberUids, onClose }: Props) 
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontWeight: 600,
-                    color: 'var(--color-brand-700)',
+                    color: 'var(--color-brand-600)',
                     flexShrink: 0,
                   }}
                 >

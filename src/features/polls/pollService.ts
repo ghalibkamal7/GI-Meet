@@ -45,7 +45,8 @@ export async function createPoll(
 export function subscribeToPolls(
   parentType: 'chats' | 'groups' | 'meetings' | 'rooms',
   parentId: string,
-  callback: (polls: Poll[]) => void
+  callback: (polls: Poll[]) => void,
+  onError?: (error: Error) => void
 ): Unsubscribe {
   return onSnapshot(pollsCollection(parentType, parentId), (snap) => {
     callback(
@@ -63,7 +64,7 @@ export function subscribeToPolls(
         };
       })
     );
-  });
+  }, onError);
 }
 
 export async function votePoll(

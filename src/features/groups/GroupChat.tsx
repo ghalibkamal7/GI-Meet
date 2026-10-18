@@ -29,7 +29,7 @@ import { subscribeToPolls, type Poll } from '../polls/pollService';
 import { PollCard, CreatePollModal } from '../polls/PollComponents';
 import { GiAiSummaryButton } from '../gi-ai/GiAiSummaryButton';
 import { summarizeConversation } from '../gi-ai/giAiService';
-import { Phone, Video, BarChart3, Megaphone, Pin, Lock } from 'lucide-react';
+import { Phone, Video, BarChart3, Megaphone, Pin, Lock, MoreVertical } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { getPendingReadMark } from '../chat/readState';
 
@@ -38,6 +38,7 @@ export function GroupChat() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const headerMenuRef = useRef<HTMLDetailsElement | null>(null);
   const [group, setGroup] = useState<Group | null>(null);
   const [rawMessages, setRawMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -270,25 +271,54 @@ export function GroupChat() {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowInfo(true)}>
+    <div className="rb-chat-layout" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="rb-chat-header" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
+        <button type="button" className="rb-chat-header__group-title" aria-label={`Open ${group.name} group information`} style={{ fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', color: 'var(--color-text)', padding: 0 }} onClick={() => setShowInfo(true)}>
           {group.name} <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--color-text-muted)' }}>({group.members.length})</span>
           {groupKey && (
             <span title="End-to-end encrypted" style={{ display: 'flex', color: 'var(--color-brand-600)' }}>
               <Lock size={12} strokeWidth={1.75} />
             </span>
           )}
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          <button className="rb-btn rb-btn--outline rb-icon-btn" title="Start voice call" onClick={() => handleStartMeeting(true)}><Phone size={16} strokeWidth={1.75} /></button>
-          <button className="rb-btn rb-btn--outline" style={{ padding: '6px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowPolls((v) => !v)}>
-            <BarChart3 size={15} strokeWidth={1.75} /> Polls
-          </button>
-          <GiAiSummaryButton onGenerate={() => summarizeConversation('groups', groupId!)} />
-          <button className="rb-btn rb-btn--primary" style={{ padding: '6px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => handleStartMeeting(false)}>
+        </button>
+        <div className="rb-chat-header__actions">
+          <button className="rb-btn rb-btn--outline rb-icon-btn" aria-label="Start voice call" title="Start voice call" onClick={() => handleStartMeeting(true)}><Phone size={17} strokeWidth={1.75} /></button>
+          <button className="rb-btn rb-btn--primary" aria-label="Start video meeting" style={{ padding: '6px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => handleStartMeeting(false)}>
             <Video size={15} strokeWidth={1.75} /> Start meeting
           </button>
+          <details
+            ref={headerMenuRef}
+            className="rb-chat-header-menu"
+            aria-label="Group chat actions"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                headerMenuRef.current?.removeAttribute('open');
+                headerMenuRef.current?.querySelector('summary')?.focus();
+              }
+            }}
+          >
+            <summary className="rb-btn rb-btn--outline rb-icon-btn" aria-label="More group chat actions" title="More group chat actions">
+              <MoreVertical size={17} strokeWidth={1.75} />
+            </summary>
+            <div className="rb-chat-header-menu__panel rb-menu-surface">
+              <div className="rb-chat-header-menu__label">Chat tools</div>
+              <button type="button" className="rb-chat-header-menu__item" onClick={(event) => {
+                setShowPolls((visible) => !visible);
+                event.currentTarget.closest('details')?.removeAttribute('open');
+              }}>
+                <BarChart3 size={16} aria-hidden="true" />
+                <span>{showPolls ? 'Close polls' : 'Polls'}</span>
+              </button>
+              <div className="rb-chat-header-menu__label rb-chat-header-menu__label--separated">More</div>
+              <div className="rb-chat-header-menu__summary">
+                <GiAiSummaryButton
+                  onGenerate={() => summarizeConversation('groups', groupId!)}
+                  onOpen={() => headerMenuRef.current?.removeAttribute('open')}
+                />
+                <span>Summarize conversation</span>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
 

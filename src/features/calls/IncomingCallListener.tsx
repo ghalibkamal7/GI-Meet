@@ -91,7 +91,7 @@ export function IncomingCallListener() {
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: 600,
-            color: 'var(--color-brand-700)',
+            color: 'var(--color-brand-600)',
             flexShrink: 0,
           }}
         >

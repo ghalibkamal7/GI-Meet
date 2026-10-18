@@ -5,7 +5,6 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
-  getDocs,
   onSnapshot,
   query,
   where,
@@ -23,6 +22,8 @@ import type { Group, Announcement } from './groupTypes';
 import type { Message } from '../chat/chatTypes';
 import { toMillis, timestampMapToMillis } from '../chat/readState';
 import { ENCRYPTED_PREVIEW_FALLBACK } from '../chat/previewText';
+import { toggleMessageReaction } from '../chat/chatService';
+import { joinGroupInvite, resolveGroupInvite } from '../../services/invitationService';
 
 function generateInviteCode(): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -80,10 +81,13 @@ export async function getGroup(groupId: string): Promise<Group | null> {
   return snap.exists() ? docToGroup(snap as QueryDocumentSnapshot<DocumentData>) : null;
 }
 
-export async function getGroupByInviteCode(inviteCode: string): Promise<Group | null> {
-  const q = query(collection(db, 'groups'), where('inviteCode', '==', inviteCode), limit(1));
-  const snap = await getDocs(q);
-  return snap.empty ? null : docToGroup(snap.docs[0]);
+export async function getGroupByInviteCode(inviteCode: string) {
+  try {
+    return await resolveGroupInvite(inviteCode);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('invalid or has expired')) return null;
+    throw error;
+  }
 }
 
 function docToGroup(d: QueryDocumentSnapshot<DocumentData>): Group {
@@ -126,11 +130,10 @@ export async function addMember(groupId: string, uid: string, info: { displayNam
   });
 }
 
-export async function joinGroupByInviteCode(inviteCode: string, uid: string, info: { displayName: string; photoURL: string | null }): Promise<Group | null> {
+export async function joinGroupByInviteCode(inviteCode: string): Promise<string | null> {
   const group = await getGroupByInviteCode(inviteCode);
   if (!group) return null;
-  await addMember(group.id, uid, info);
-  return group;
+  return joinGroupInvite(inviteCode);
 }
 
 export async function removeMember(groupId: string, uid: string): Promise<void> {
@@ -199,6 +202,23 @@ export function subscribeToGroupMessages(groupId: string, callback: (messages: M
 
 function docToMessage(d: QueryDocumentSnapshot<DocumentData>): Message {
   const data = d.data();
+  const reactions: Record<string, string[]> = Object.fromEntries(
+    Object.entries(data.reactions ?? {}).map(([emoji, uids]) => [
+      emoji,
+      Array.isArray(uids) ? [...uids] : [],
+    ])
+  );
+  const reactionUsers = data.reactionUsers ?? {};
+  for (const [uid, emojis] of Object.entries(reactionUsers)) {
+    for (const [emoji, uids] of Object.entries(reactions)) {
+      reactions[emoji] = uids.filter((reactingUid) => reactingUid !== uid);
+    }
+    if (Array.isArray(emojis)) {
+      for (const emoji of emojis) {
+        reactions[emoji] = [...(reactions[emoji] ?? []), uid];
+      }
+    }
+  }
   return {
     id: d.id,
     chatId: data.chatId,
@@ -211,7 +231,7 @@ function docToMessage(d: QueryDocumentSnapshot<DocumentData>): Message {
     forwardedFrom: data.forwardedFrom ?? null,
     deleted: Boolean(data.deleted),
     attachment: data.attachment ?? null,
-    reactions: data.reactions ?? {},
+    reactions,
     starredBy: data.starredBy ?? [],
     encrypted: Boolean(data.encrypted),
 iv: data.iv ?? null,
@@ -231,9 +251,10 @@ export async function sendGroupMessage(params: {
   const trimmed = params.text.trim();
   if (!trimmed && !params.attachment) return;
 
-  await updateDoc(doc(db, 'groups', params.groupId), {
-    lastMessage: params.attachment ? `📎 ${params.attachment.name}` : params.encrypted ? ENCRYPTED_PREVIEW_FALLBACK : trimmed,
-    lastMessageSenderId: params.senderId,
+  await addDoc(collection(db, 'groups', params.groupId, 'messages'), {
+    chatId: params.groupId,
+    senderId: params.senderId,
+    text: trimmed,
     encrypted: Boolean(params.encrypted),
     iv: params.iv ?? null,
     createdAt: serverTimestamp(),
@@ -244,11 +265,17 @@ export async function sendGroupMessage(params: {
     deleted: false,
     attachment: params.attachment ?? null,
     reactions: {},
+    reactionUsers: {},
     starredBy: [],
   });
 
   await updateDoc(doc(db, 'groups', params.groupId), {
-    lastMessage: params.attachment ? `📎 ${params.attachment.name}` : trimmed,
+    lastMessage: params.attachment
+      ? `📎 ${params.attachment.name}`
+      : params.encrypted
+        ? ENCRYPTED_PREVIEW_FALLBACK
+        : trimmed,
+    lastMessageSenderId: params.senderId,
     lastMessageAt: serverTimestamp(),
   });
 }
@@ -274,9 +301,7 @@ export async function deleteGroupMessage(groupId: string, messageId: string): Pr
 }
 
 export async function toggleGroupReaction(groupId: string, messageId: string, emoji: string, uid: string, already: boolean): Promise<void> {
-  await updateDoc(doc(db, 'groups', groupId, 'messages', messageId), {
-    [`reactions.${emoji}`]: already ? arrayRemove(uid) : arrayUnion(uid),
-  });
+  await toggleMessageReaction(doc(db, 'groups', groupId, 'messages', messageId), emoji, uid, already);
 }
 
 export async function toggleGroupStar(groupId: string, messageId: string, uid: string, already: boolean): Promise<void> {

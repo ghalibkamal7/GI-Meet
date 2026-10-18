@@ -125,7 +125,7 @@ export function CallScreen() {
   }
 
   return (
-    <div style={{ height: '100%', background: '#0b0f0e', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="rb-call-screen" style={{ height: '100%', background: '#0b0f0e', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {/* Always mounted so voice calls (which render no <video>) still play remote audio. */}
       <audio ref={remoteAudioRef} autoPlay />
 
@@ -156,6 +156,7 @@ export function CallScreen() {
 
       {callType === 'video' && (
         <video
+          className="rb-call-local-video"
           ref={localVideoRef}
           autoPlay
           playsInline
@@ -179,16 +180,16 @@ export function CallScreen() {
         </div>
       )}
 
-      <div style={{ position: 'absolute', bottom: 24, display: 'flex', gap: 16 }}>
-        <button onClick={toggleMic} style={controlBtnStyle(!micOn)} title={micOn ? 'Mute' : 'Unmute'}>
+      <div className="rb-call-controls" style={{ position: 'absolute', bottom: 24, display: 'flex', gap: 16 }}>
+        <button onClick={toggleMic} style={controlBtnStyle(!micOn)} title={micOn ? 'Mute' : 'Unmute'} aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}>
           {micOn ? <Mic size={19} strokeWidth={1.75} /> : <MicOff size={19} strokeWidth={1.75} />}
         </button>
         {callType === 'video' && (
-          <button onClick={toggleCamera} style={controlBtnStyle(!cameraOn)} title={cameraOn ? 'Turn off camera' : 'Turn on camera'}>
+          <button onClick={toggleCamera} style={controlBtnStyle(!cameraOn)} title={cameraOn ? 'Turn off camera' : 'Turn on camera'} aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}>
             {cameraOn ? <VideoIcon size={19} strokeWidth={1.75} /> : <VideoOff size={19} strokeWidth={1.75} />}
           </button>
         )}
-        <button onClick={handleEndCall} style={{ ...controlBtnStyle(false), background: 'var(--color-danger)' }} title="End call">
+        <button onClick={handleEndCall} style={{ ...controlBtnStyle(false), background: 'var(--color-danger)' }} title="End call" aria-label="End call">
           <PhoneOff size={19} strokeWidth={1.75} />
         </button>
       </div>

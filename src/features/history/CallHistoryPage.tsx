@@ -51,7 +51,7 @@ export function CallHistoryPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="rb-page rb-page--narrow">
       <h1 style={{ fontSize: 22, marginBottom: 16 }}>Calls</h1>
       {entries.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No calls yet.</p>}
       {entries.map((entry) => (

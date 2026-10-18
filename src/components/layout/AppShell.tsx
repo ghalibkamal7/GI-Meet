@@ -25,16 +25,16 @@ export function AppShell() {
   }, [profile, navigate]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', paddingTop: 'var(--safe-top)' }}>
-      <div className="rb-desktop-only">
+    <div className="rb-app-shell" style={{ height: '100%', display: 'flex', paddingTop: 'var(--safe-top)' }}>
+      <div className="rb-desktop-only rb-sidebar-slot">
         <Sidebar />
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <main style={{ flex: 1, overflow: 'auto' }}>
+      <div className="rb-app-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <main className="rb-route-content" style={{ flex: 1, overflow: 'auto' }}>
           <Outlet />
         </main>
-        <div className="rb-mobile-only">
+        <div className="rb-mobile-only rb-bottom-nav-slot">
           <BottomNav />
         </div>
       </div>
@@ -47,6 +47,7 @@ export function AppShell() {
         @media (max-width: 768px) {
           .rb-desktop-only { display: none; }
           .rb-mobile-only { display: block; }
+          .rb-route-content { padding-bottom: 0; }
         }
       `}</style>
     </div>

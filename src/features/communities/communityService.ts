@@ -19,7 +19,12 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import type { Community, CommunityAnnouncement } from './communityTypes';
-import { createGroup, addMember as addGroupMember } from '../groups/groupService';
+import { createGroup } from '../groups/groupService';
+import {
+  joinCommunityInvite as joinByInvite,
+  joinPublicCommunity,
+  resolveCommunityInvite,
+} from '../../services/invitationService';
 
 function generateInviteCode(): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -102,29 +107,21 @@ export async function getCommunity(communityId: string): Promise<Community | nul
   return snap.exists() ? docToCommunity(snap as QueryDocumentSnapshot<DocumentData>) : null;
 }
 
-export async function getCommunityByInviteCode(inviteCode: string): Promise<Community | null> {
-  const q = query(collection(db, 'communities'), where('inviteCode', '==', inviteCode), limit(1));
-  const snap = await getDocs(q);
-  return snap.empty ? null : docToCommunity(snap.docs[0]);
+export async function getCommunityByInviteCode(inviteCode: string) {
+  try {
+    return await resolveCommunityInvite(inviteCode);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('invalid or has expired')) return null;
+    throw error;
+  }
 }
 
-export async function joinCommunity(
-  communityId: string,
-  uid: string,
-  info: { displayName: string; photoURL: string | null }
-): Promise<void> {
-  const community = await getCommunity(communityId);
-  if (!community) throw new Error('community-not-found');
+export async function joinCommunity(communityId: string): Promise<void> {
+  await joinPublicCommunity(communityId);
+}
 
-  await updateDoc(doc(db, 'communities', communityId), {
-    members: arrayUnion(uid),
-    [`memberInfo.${uid}`]: info,
-  });
-
-  // Joining a community auto-joins its announcement group, same as WhatsApp communities.
-  if (community.announcementGroupId) {
-    await addGroupMember(community.announcementGroupId, uid, info);
-  }
+export async function joinCommunityByInviteCode(inviteCode: string): Promise<string> {
+  return joinByInvite(inviteCode);
 }
 
 export async function leaveCommunity(communityId: string, uid: string): Promise<void> {

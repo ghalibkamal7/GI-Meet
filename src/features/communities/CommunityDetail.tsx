@@ -76,7 +76,7 @@ export function CommunityDetail() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 640 }}>
+    <div className="rb-page rb-page--narrow rb-community-detail">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
         <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 22, color: '#fff', flexShrink: 0 }}>
           {community.name.charAt(0).toUpperCase()}
@@ -136,7 +136,7 @@ export function CommunityDetail() {
           onClick={() => navigate(`/groups/${g.id}`)}
           style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 0', background: 'none', border: 'none', borderBottom: '1px solid var(--color-border)', textAlign: 'left', cursor: 'pointer' }}
         >
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-brand-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, color: 'var(--color-brand-700)' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-brand-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, color: 'var(--color-brand-600)' }}>
             {g.name.charAt(0).toUpperCase()}
           </div>
           <div>
@@ -152,7 +152,7 @@ export function CommunityDetail() {
 
       {showMembers && (
         <div style={overlayStyle} onClick={() => setShowMembers(false)}>
-          <div className="rb-card" style={{ width: 340, padding: 20, maxHeight: '70vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+          <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label="Community members" style={{ width: 340, padding: 20, maxHeight: '70vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}><Settings2 size={16} strokeWidth={1.75} /> Members</h3>
             {community.members.map((uid) => {
               const info = community.memberInfo[uid];

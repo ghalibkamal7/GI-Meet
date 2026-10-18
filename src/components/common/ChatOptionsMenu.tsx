@@ -23,11 +23,26 @@ export function ChatOptionsMenu({ chatId, currentUid, otherUid, otherName, isMut
   const { showToast } = useToast();
   const [showReport, setShowReport] = useState(false);
   const [confirming, setConfirming] = useState<'delete' | 'block' | null>(null);
+  const [busyAction, setBusyAction] = useState(false);
 
   async function handleReport(reason: string) {
-    await reportUser(currentUid, otherUid, reason, `chat:${chatId}`);
-    showToast('Report submitted. Thanks for letting us know.', 'success');
-    onClose();
+    await runMenuAction(async () => {
+      await reportUser(currentUid, otherUid, reason, `chat:${chatId}`);
+      showToast('Report submitted. Thanks for letting us know.', 'success');
+      onClose();
+    });
+  }
+
+  async function runMenuAction(action: () => Promise<void>) {
+    if (busyAction) return;
+    setBusyAction(true);
+    try {
+      await action();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'That action failed. Please try again.', 'error');
+    } finally {
+      setBusyAction(false);
+    }
   }
 
   async function handleDelete() {
@@ -68,13 +83,19 @@ export function ChatOptionsMenu({ chatId, currentUid, otherUid, otherName, isMut
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div className="rb-card" style={{ width: 300, padding: 16 }} onClick={(e) => e.stopPropagation()}>
+      <div className="rb-card rb-modal-card" role="dialog" aria-modal="true" aria-label={showReport ? 'Report user' : 'Chat options'} style={{ width: 300, padding: 16 }} onClick={(e) => e.stopPropagation()}>
         {!showReport ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <button style={rowStyle} onClick={() => toggleMuteChat(chatId, currentUid, !isMuted).then(onClose)}>
+            <button style={rowStyle} disabled={busyAction} onClick={() => runMenuAction(async () => {
+              await toggleMuteChat(chatId, currentUid, !isMuted);
+              onClose();
+            })}>
               {isMuted ? <Bell size={15} strokeWidth={1.75} /> : <BellOff size={15} strokeWidth={1.75} />} {isMuted ? 'Unmute chat' : 'Mute chat'}
             </button>
-            <button style={rowStyle} onClick={() => toggleArchiveChat(chatId, currentUid, !isArchived).then(onClose)}>
+            <button style={rowStyle} disabled={busyAction} onClick={() => runMenuAction(async () => {
+              await toggleArchiveChat(chatId, currentUid, !isArchived);
+              onClose();
+            })}>
               {isArchived ? <ArchiveRestore size={15} strokeWidth={1.75} /> : <Archive size={15} strokeWidth={1.75} />} {isArchived ? 'Unarchive chat' : 'Archive chat'}
             </button>
             <button style={rowStyle} onClick={() => setConfirming('delete')}>
@@ -98,7 +119,7 @@ export function ChatOptionsMenu({ chatId, currentUid, otherUid, otherName, isMut
           <div>
             <h4 style={{ marginBottom: 10 }}>Why are you reporting this user?</h4>
             {REPORT_REASONS.map((reason) => (
-              <button key={reason} style={rowStyle} onClick={() => handleReport(reason)}>
+              <button key={reason} style={rowStyle} disabled={busyAction} onClick={() => handleReport(reason)}>
                 {reason}
               </button>
             ))}

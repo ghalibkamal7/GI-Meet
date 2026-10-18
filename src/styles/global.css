@@ -8,12 +8,12 @@
   --color-accent: #f2a93b;
   --color-accent-dark: #d88f22;
 
-  --color-bg: #faf9f6;
+  --color-bg: #f5f7f6;
   --color-surface: #ffffff;
-  --color-surface-alt: #f1efe9;
-  --color-border: #e4e0d6;
-  --color-text: #16211f;
-  --color-text-muted: #5c6b68;
+  --color-surface-alt: #f0f4f2;
+  --color-border: #dfe7e3;
+  --color-text: #172522;
+  --color-text-muted: #526560;
   --color-danger: #c4442e;
   --color-success: #2f8f5b;
 
@@ -21,12 +21,16 @@
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 
-  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
   --radius-md: 14px;
-  --radius-lg: 22px;
+  --radius-lg: 20px;
+  --radius-xl: 26px;
 
-  --shadow-sm: 0 1px 2px rgba(11, 51, 47, 0.06);
-  --shadow-md: 0 8px 24px rgba(11, 51, 47, 0.1);
+  --shadow-sm: 0 1px 2px rgba(11, 51, 47, 0.05), 0 2px 8px rgba(11, 51, 47, 0.035);
+  --shadow-md: 0 14px 38px rgba(11, 51, 47, 0.13);
+  --shadow-lg: 0 22px 60px rgba(11, 51, 47, 0.18);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-brand-600) 24%, transparent);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -40,10 +44,14 @@
   --color-bg: #0e1210;
   --color-surface: #161d1a;
   --color-surface-alt: #1d2521;
-  --color-border: #29332e;
-  --color-text: #edf2f0;
-  --color-text-muted: #93a19c;
-  --color-brand-100: #12332e;
+  --color-border: #2c3a34;
+  --color-text: #edf3f0;
+  --color-text-muted: #a5b3ad;
+  --color-brand-100: #1d3933;
+  --color-brand-600: #57b6a8;
+  --color-brand-700: #224d45;
+  --color-danger: #ff8973;
+  --color-success: #69d59a;
 
   color-scheme: dark;
 }
@@ -65,6 +73,7 @@ body {
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  line-height: 1.45;
 }
 
 h1,
@@ -76,6 +85,15 @@ h3 {
   margin: 0;
 }
 
+h1 {
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.2;
+}
+
+h2 {
+  line-height: 1.25;
+}
+
 a {
   color: inherit;
 }
@@ -84,9 +102,17 @@ button {
   font-family: inherit;
 }
 
+button,
+input,
+textarea,
+select {
+  accent-color: var(--color-brand-600);
+}
+
 :focus-visible {
   outline: 2px solid var(--color-brand-600);
   outline-offset: 2px;
+  box-shadow: var(--focus-ring);
 }
 
 .rb-btn {
@@ -94,13 +120,14 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 20px;
+  min-height: 42px;
+  padding: 10px 16px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
 
 .rb-btn:active {
@@ -130,11 +157,13 @@ button {
 
 .rb-btn--outline:hover:not(:disabled) {
   background: var(--color-surface-alt);
+  border-color: color-mix(in srgb, var(--color-brand-600) 28%, var(--color-border));
 }
 
 .rb-icon-btn {
   width: 34px;
   height: 34px;
+  min-height: 34px;
   padding: 0 !important;
   display: inline-flex;
   align-items: center;
@@ -170,17 +199,344 @@ button {
   background: var(--color-surface);
   color: var(--color-text);
   font-size: 15px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 
-.rb-input:focus {
+.rb-input:focus,
+.rb-input:focus-visible {
   border-color: var(--color-brand-600);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.rb-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.78;
+}
+
+.rb-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .rb-card {
+  max-width: min(100%, calc(100vw - 24px));
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.rb-modal-card {
+  width: min(100%, 440px) !important;
+  max-height: min(80vh, calc(100dvh - 32px)) !important;
+  overflow-y: auto;
+  padding: clamp(16px, 4vw, 24px) !important;
+  border-radius: var(--radius-lg);
+}
+
+.rb-page {
+  width: min(100%, 1120px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 36px);
+}
+
+.rb-list-page {
+  width: min(100%, 980px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 24px clamp(14px, 2.2vw, 28px);
+}
+
+.rb-meetings-page > h2 {
+  margin-top: 28px !important;
+}
+
+.rb-meetings-page > .rb-card {
+  padding: 14px 16px !important;
+  border-radius: var(--radius-md);
+}
+
+.rb-privacy-page > h1 {
+  margin-top: 8px !important;
+}
+
+.rb-meeting-lobby > h2 {
+  font-size: clamp(1.4rem, 4vw, 1.8rem);
+}
+
+.rb-meeting-code {
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rb-meeting-preview {
+  width: min(360px, calc(100vw - 48px)) !important;
+  height: auto !important;
+  aspect-ratio: 3 / 2;
+}
+
+.rb-meeting-lobby__controls {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.rb-meeting-panel {
+  flex: 0 0 300px;
+  min-width: 0;
+  background: var(--color-surface);
+}
+
+.rb-meeting-controls {
+  padding-bottom: calc(14px + var(--safe-bottom)) !important;
+}
+
+.rb-call-controls {
+  bottom: calc(24px + var(--safe-bottom)) !important;
+}
+
+.rb-community-detail .rb-card {
+  border-radius: var(--radius-lg);
+}
+
+.rb-page--narrow {
+  max-width: 820px;
+}
+
+.rb-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.rb-page-header p {
+  color: var(--color-text-muted);
+  margin: 6px 0 0;
+}
+
+.rb-section {
+  margin-top: 28px;
+}
+
+.rb-section-title {
+  margin: 0 0 14px;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.rb-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: clamp(32px, 6vw, 64px) 20px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.rb-empty-state h2,
+.rb-empty-state h3 {
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.rb-empty-state p {
+  max-width: 38ch;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.rb-surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.rb-divider {
+  height: 1px;
+  border: 0;
+  background: var(--color-border);
+}
+
+.rb-menu-surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.rb-chat-header {
+  background: var(--color-surface);
+}
+
+.rb-desktop-hide {
+  display: none !important;
+}
+
+.rb-auth-screen {
+  min-height: 100%;
+  padding: max(24px, var(--safe-top)) 20px max(24px, var(--safe-bottom)) !important;
+}
+
+.rb-auth-card {
+  padding: clamp(20px, 5vw, 32px) !important;
+  border-radius: var(--radius-xl);
+}
+
+.rb-settings-layout {
+  display: flex;
+  min-height: 100%;
+  background: var(--color-bg);
+}
+
+.rb-settings-nav {
+  width: 220px;
+  flex: 0 0 auto;
+  padding: 24px 14px;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.rb-settings-panel {
+  width: min(100%, 680px);
+  padding: clamp(22px, 4vw, 40px);
+}
+
+.rb-settings-nav button {
+  min-height: 42px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.rb-chat-header__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rb-chat-header .rb-icon-btn {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.rb-chat-header__identity {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.rb-chat-header__identity > div:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-chat-header__group-title {
+  min-width: 0;
+  max-width: min(42vw, 360px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-chat-header-menu {
+  position: relative;
+}
+
+.rb-chat-header-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.rb-chat-header-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rb-chat-header-menu[open] > summary {
+  background: var(--color-brand-100);
+  border-color: var(--color-brand-600);
+  color: var(--color-brand-600);
+}
+
+.rb-chat-header-menu__panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 248px;
+  padding: 6px;
+}
+
+.rb-chat-header-menu__label {
+  padding: 7px 10px 5px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rb-chat-header-menu__label--separated {
+  margin-top: 5px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 11px;
+}
+
+.rb-chat-header-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rb-chat-header-menu__item:hover,
+.rb-chat-header-menu__item:focus-visible {
+  background: var(--color-surface-alt);
+}
+
+.rb-chat-header-menu__item svg,
+.rb-chat-header-menu__summary svg {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.rb-chat-header-menu__summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 3px 10px;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.rb-chat-header-menu__summary .rb-icon-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+}
+
+.rb-chat-header-menu__summary .rb-btn {
+  flex: 0 0 auto;
 }
 
 .rb-error-text {
@@ -234,4 +590,164 @@ button {
 .rb-native textarea,
 .rb-native select {
   font-size: 16px;
+}
+
+@media (hover: hover) {
+  .rb-card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+}
+
+@media (max-width: 768px) {
+  .rb-page {
+    padding: 20px 16px;
+  }
+
+  .rb-page-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .rb-page-header > :last-child {
+    max-width: 100%;
+  }
+
+  .rb-btn {
+    min-height: 42px;
+    padding: 9px 13px;
+    font-size: 14px;
+  }
+
+  .rb-card {
+    border-radius: var(--radius-md);
+  }
+
+  .rb-chat-header {
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+
+  .rb-desktop-hide {
+    display: inline-flex !important;
+  }
+
+  .rb-auth-screen {
+    padding: max(18px, var(--safe-top)) 16px max(18px, var(--safe-bottom));
+  }
+
+  .rb-auth-card {
+    border-radius: var(--radius-lg);
+  }
+
+  .rb-settings-layout {
+    flex-direction: column;
+  }
+
+  .rb-settings-nav {
+    display: flex;
+    width: 100%;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+    scrollbar-width: thin;
+  }
+
+  .rb-settings-nav button {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 9px 12px !important;
+    white-space: nowrap;
+  }
+
+  .rb-settings-panel {
+    width: 100%;
+    max-width: 680px;
+  }
+
+  .rb-meeting-lobby {
+    justify-content: flex-start !important;
+    gap: 16px !important;
+    padding: 20px 16px !important;
+  }
+
+  .rb-meeting-room .rb-meeting-participant-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)) !important;
+    align-content: start !important;
+    padding: 16px 12px !important;
+  }
+
+  .rb-meeting-room .rb-meeting-controls {
+    gap: 6px !important;
+    padding: 10px 8px calc(12px + var(--safe-bottom)) !important;
+  }
+
+  .rb-meeting-room .rb-meeting-panel {
+    position: absolute;
+    z-index: 75;
+    inset: var(--safe-top) 0 var(--safe-bottom) auto;
+    width: min(360px, 100%) !important;
+    max-width: 100%;
+    height: auto !important;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .rb-call-screen {
+    overflow: hidden;
+  }
+
+  .rb-call-local-video {
+    right: 12px !important;
+    bottom: calc(108px + var(--safe-bottom)) !important;
+    width: min(120px, 32vw) !important;
+    height: auto !important;
+    aspect-ratio: 7 / 5;
+  }
+
+  .rb-call-controls {
+    gap: 12px !important;
+  }
+
+  .rb-chat-header__actions {
+    gap: 4px;
+  }
+
+  .rb-chat-header .rb-icon-btn {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 420px) {
+  .rb-page {
+    padding: 16px 12px;
+  }
+
+  .rb-page-header {
+    gap: 12px;
+  }
+
+  .rb-chat-header__actions {
+    gap: 2px;
+  }
+
+  .rb-chat-header-menu__panel {
+    right: -2px;
+    width: min(248px, calc(100vw - 24px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
