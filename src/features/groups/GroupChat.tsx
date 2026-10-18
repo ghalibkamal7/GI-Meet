@@ -15,7 +15,14 @@ import {
   postAnnouncement,
 } from './groupService';
 import { getMyGroupKey } from './groupCrypto';
-import { ensureDeviceKeys, encryptForChat, decryptForChat, decryptAttachmentUrl } from '../chat/e2ee';
+import {
+  ensureDeviceKeys,
+  encryptForChat,
+  decryptForChat,
+  decryptAttachmentUrl,
+  messageDecryptionFallback,
+  DeviceEncryptionKeyError,
+} from '../chat/e2ee';
 import type { Group, Announcement } from './groupTypes';
 import type { Message } from '../chat/chatTypes';
 import { MessageBubble } from '../../components/common/MessageBubble';
@@ -44,6 +51,7 @@ export function GroupChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [groupKey, setGroupKey] = useState<CryptoKey | null>(null);
   const [encryptionReady, setEncryptionReady] = useState(false);
+  const [encryptionError, setEncryptionError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
@@ -77,12 +85,26 @@ export function GroupChat() {
   useEffect(() => {
     if (!groupId || !profile) return;
     let cancelled = false;
+    setGroupKey(null);
+    setEncryptionError(null);
+    setEncryptionReady(false);
     (async () => {
-      const myPrivateKey = await ensureDeviceKeys(profile.uid);
-      const key = await getMyGroupKey(groupId, profile.uid, myPrivateKey);
-      if (!cancelled) {
-        setGroupKey(key);
-        setEncryptionReady(true);
+      try {
+        const myPrivateKey = await ensureDeviceKeys(profile.uid);
+        const key = await getMyGroupKey(groupId, profile.uid, myPrivateKey);
+        if (!cancelled) {
+          setGroupKey(key);
+          setEncryptionError(null);
+          setEncryptionReady(true);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGroupKey(null);
+          setEncryptionError(error instanceof DeviceEncryptionKeyError
+            ? error.message
+            : 'Could not prepare group encryption keys. Check your connection and try again.');
+          setEncryptionReady(true);
+        }
       }
     })();
     return () => {
@@ -102,17 +124,19 @@ export function GroupChat() {
           let attachment = m.attachment;
 
           if (m.encrypted) {
-            text = groupKey
-              ? await decryptForChat(groupKey, { ciphertext: m.text, iv: m.iv ?? '' })
-              : '🔒 Encrypted message (key unavailable)';
+            try {
+              text = await decryptForChat(groupKey, { ciphertext: m.text, iv: m.iv ?? '' });
+            } catch (error) {
+              text = messageDecryptionFallback(error);
+            }
           }
 
-          if (replyTo?.iv && groupKey) {
+          if (replyTo?.iv) {
             try {
               const replyText = await decryptForChat(groupKey, { ciphertext: replyTo.text, iv: replyTo.iv });
               replyTo = { ...replyTo, text: replyText };
-            } catch {
-              // Leave as-is if it can't be decrypted.
+            } catch (error) {
+              replyTo = { ...replyTo, text: messageDecryptionFallback(error) };
             }
           }
 
@@ -165,6 +189,7 @@ export function GroupChat() {
   const latestAnnouncement = announcements[0];
 
   async function handleSend(text: string) {
+    if (encryptionError) throw new Error(encryptionError);
     let payloadText = text;
     let encrypted = false;
     let iv: string | undefined;
@@ -395,14 +420,20 @@ export function GroupChat() {
         </div>
       )}
 
-      <MessageComposer
-        replyingTo={replyingTo}
-        onCancelReply={() => setReplyingTo(null)}
-        onSend={handleSend}
-        onSendFile={handleSendFile}
-        onSendVoice={handleSendVoice}
-        placeholder={editingMessage ? 'Edit your message...' : 'Type a message...'}
-      />
+      {encryptionError ? (
+        <p role="alert" style={{ margin: '0 16px 8px', color: 'var(--color-danger)', fontSize: 13 }}>
+          {encryptionError}
+        </p>
+      ) : (
+        <MessageComposer
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
+          onSend={handleSend}
+          onSendFile={handleSendFile}
+          onSendVoice={handleSendVoice}
+          placeholder={editingMessage ? 'Edit your message...' : 'Type a message...'}
+        />
+      )}
 
       {forwardingMessage && <ForwardMessageModal message={forwardingMessage} onClose={() => setForwardingMessage(null)} />}
       {showCreatePoll && <CreatePollModal parentType="groups" parentId={groupId!} createdBy={profile.uid} onClose={() => setShowCreatePoll(false)} />}

@@ -1,33 +1,107 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
-import { generateKeyPair, exportPublicKey, importPublicKey, deriveSharedKey, encryptText, decryptText, decryptBytes, toBase64, type EncryptedPayload } from '../../services/cryptoService';
+import {
+  generateKeyPair,
+  exportPublicKey,
+  importPublicKey,
+  deriveSharedKey,
+  encryptText,
+  decryptBytes,
+  decryptTextWithDiagnostics,
+  toBase64,
+  type EncryptedPayload,
+} from '../../services/cryptoService';
 import { getPrivateKey, savePrivateKey } from '../../services/secureKeyStore';
 import { updateUserPublicKey } from '../../services/userService';
+import { decideDeviceKeyAction } from './deviceKeyPolicy';
 
-const sharedKeyCache = new Map<string, CryptoKey>();
+export {
+  MessageDecryptionError,
+  messageDecryptionFallback,
+  type MessageDecryptionFailure,
+} from '../../services/cryptoService';
+
+const sharedKeyCache = new WeakMap<CryptoKey, Map<string, { publicKeyJwk: string; sharedKey: CryptoKey }>>();
+const deviceKeyTasks = new Map<string, Promise<CryptoKey>>();
+
+export class DeviceEncryptionKeyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DeviceEncryptionKeyError';
+  }
+}
+
+async function exportPublicKeyForPrivateKey(privateKey: CryptoKey): Promise<string> {
+  const jwk: Record<string, unknown> = { ...await crypto.subtle.exportKey('jwk', privateKey) };
+  delete jwk.d;
+  jwk.key_ops = [];
+  return JSON.stringify(jwk);
+}
+
+function publishedKey(data: Record<string, unknown> | undefined): string | null {
+  return typeof data?.publicKeyJwk === 'string' && data.publicKeyJwk.trim()
+    ? data.publicKeyJwk
+    : null;
+}
 
 export async function ensureDeviceKeys(uid: string): Promise<CryptoKey> {
-  const existing = await getPrivateKey(uid);
-  if (existing) return existing;
+  const pending = deviceKeyTasks.get(uid);
+  if (pending) return pending;
 
-  const keyPair = await generateKeyPair();
-  await savePrivateKey(uid, keyPair.privateKey);
-  const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
-  await updateUserPublicKey(uid, publicKeyJwk);
-  return keyPair.privateKey;
+  const task = (async () => {
+    const privateKey = await getPrivateKey(uid);
+    const userSnapshot = await getDoc(doc(db, 'users', uid));
+    const remotePublicKey = publishedKey(userSnapshot.data());
+    const localPublicKey = privateKey ? await exportPublicKeyForPrivateKey(privateKey) : null;
+    const action = decideDeviceKeyAction(Boolean(privateKey), localPublicKey, remotePublicKey);
+
+    if (action === 'restore-missing-key') {
+      throw new DeviceEncryptionKeyError(
+        'This device is missing the encryption key registered to your account. GI Meet will not replace it, because doing so could make existing messages unreadable. Restore the original browser or device data to access encrypted messages.'
+      );
+    }
+    if (action === 'resolve-key-mismatch') {
+      throw new DeviceEncryptionKeyError(
+        'This device encryption key does not match the key registered to your account. The key was not replaced; restore the matching device key to access encrypted messages.'
+      );
+    }
+    if (action === 'use-local-key') return privateKey!;
+    if (action === 'publish-local-key') {
+      await updateUserPublicKey(uid, localPublicKey!);
+      return privateKey!;
+    }
+
+    const keyPair = await generateKeyPair();
+    const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
+    await savePrivateKey(uid, keyPair.privateKey);
+    await updateUserPublicKey(uid, publicKeyJwk);
+    return keyPair.privateKey;
+  })();
+
+  deviceKeyTasks.set(uid, task);
+  try {
+    return await task;
+  } finally {
+    if (deviceKeyTasks.get(uid) === task) deviceKeyTasks.delete(uid);
+  }
 }
 
 export async function getSharedKeyForChat(myPrivateKey: CryptoKey, otherUid: string): Promise<CryptoKey | null> {
-  const cached = sharedKeyCache.get(otherUid);
-  if (cached) return cached;
-
   const snap = await getDoc(doc(db, 'users', otherUid));
-  const publicKeyJwk = snap.data()?.publicKeyJwk;
+  const publicKeyJwk = publishedKey(snap.data());
   if (!publicKeyJwk) return null;
+
+  let userCache = sharedKeyCache.get(myPrivateKey);
+  const cached = userCache?.get(otherUid);
+  if (cached?.publicKeyJwk === publicKeyJwk) return cached.sharedKey;
 
   const theirPublicKey = await importPublicKey(publicKeyJwk);
   const sharedKey = await deriveSharedKey(myPrivateKey, theirPublicKey);
-  sharedKeyCache.set(otherUid, sharedKey);
+  if (!userCache) {
+    userCache = new Map();
+    sharedKeyCache.set(myPrivateKey, userCache);
+  }
+  userCache.set(otherUid, { publicKeyJwk, sharedKey });
   return sharedKey;
 }
 
@@ -35,12 +109,8 @@ export async function encryptForChat(key: CryptoKey, plaintext: string): Promise
   return encryptText(key, plaintext);
 }
 
-export async function decryptForChat(key: CryptoKey, payload: EncryptedPayload): Promise<string> {
-  try {
-    return await decryptText(key, payload);
-  } catch {
-    return '⚠️ Could not decrypt this message.';
-  }
+export async function decryptForChat(key: CryptoKey | null, payload: EncryptedPayload): Promise<string> {
+  return decryptTextWithDiagnostics(key, payload);
 }
 
 export async function decryptAttachmentUrl(key: CryptoKey, url: string, iv: string, mimeType: string): Promise<string> {

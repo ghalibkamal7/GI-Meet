@@ -17,6 +17,7 @@ import {
   where,
   getDocs,
   runTransaction,
+  writeBatch,
   type QueryDocumentSnapshot,
   type DocumentData,
   type DocumentReference,
@@ -223,7 +224,10 @@ export async function sendMessage(params: {
   const trimmed = params.text.trim();
   if (!trimmed && !params.attachment) return;
 
-  await addDoc(collection(db, 'chats', params.chatId, 'messages'), {
+  const messageRef = doc(collection(db, 'chats', params.chatId, 'messages'));
+  const chatRef = doc(db, 'chats', params.chatId);
+  const batch = writeBatch(db);
+  batch.set(messageRef, {
     chatId: params.chatId,
     senderId: params.senderId,
     text: trimmed,
@@ -241,12 +245,13 @@ export async function sendMessage(params: {
     iv: params.iv ?? null,
   });
 
-  // Keep the newest message's CIPHERTEXT on the chat doc so the chat list can decrypt a preview on-device.
+  // Keep message creation and its chat preview update atomic. If either write is
+  // denied, the UI must not report failure after leaving a persisted message.
   const keepCipherPreview = Boolean(
     params.encrypted && params.iv && !params.attachment && trimmed.length <= MAX_PREVIEW_CIPHERTEXT_CHARS
   );
 
-  await updateDoc(doc(db, 'chats', params.chatId), {
+  batch.update(chatRef, {
     lastMessage: params.attachment ? `📎 ${params.attachment.name}` : params.encrypted ? ENCRYPTED_PREVIEW_FALLBACK : trimmed,
     lastMessageCipher: keepCipherPreview ? trimmed : null,
     lastMessageIv: keepCipherPreview ? params.iv ?? null : null,
@@ -254,6 +259,7 @@ export async function sendMessage(params: {
     lastMessageSenderId: params.senderId,
     hiddenFor: [],
   });
+  await batch.commit();
 }
 
 export async function forwardMessage(

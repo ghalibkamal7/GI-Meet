@@ -3,6 +3,36 @@ export interface EncryptedPayload {
   iv: string; // base64, 12 bytes
 }
 
+export type MessageDecryptionFailure =
+  | 'key-unavailable'
+  | 'malformed-payload'
+  | 'authentication-failed'
+  | 'decryption-failed';
+
+export class MessageDecryptionError extends Error {
+  readonly reason: MessageDecryptionFailure;
+
+  constructor(reason: MessageDecryptionFailure) {
+    super(reason);
+    this.name = 'MessageDecryptionError';
+    this.reason = reason;
+  }
+}
+
+export function messageDecryptionFallback(error: unknown): string {
+  if (!(error instanceof MessageDecryptionError)) return '⚠️ Could not decrypt this message.';
+  switch (error.reason) {
+    case 'key-unavailable':
+      return '🔒 Encrypted message (key unavailable)';
+    case 'malformed-payload':
+      return '⚠️ Encrypted message data is malformed.';
+    case 'authentication-failed':
+      return '⚠️ Could not decrypt: the key may not match or the message data may be damaged.';
+    case 'decryption-failed':
+      return '⚠️ Could not decrypt this message.';
+  }
+}
+
 export function toBase64(buffer: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
@@ -52,6 +82,49 @@ export async function decryptText(key: CryptoKey, payload: EncryptedPayload): Pr
     fromBase64(payload.ciphertext)
   );
   return new TextDecoder().decode(plainBuffer);
+}
+
+export async function decryptTextWithDiagnostics(
+  key: CryptoKey | null,
+  payload: EncryptedPayload
+): Promise<string> {
+  if (!key) throw new MessageDecryptionError('key-unavailable');
+
+  let iv: ArrayBuffer;
+  let ciphertext: ArrayBuffer;
+  try {
+    if (
+      typeof payload?.iv !== 'string' ||
+      typeof payload?.ciphertext !== 'string' ||
+      !payload.iv ||
+      !payload.ciphertext
+    ) {
+      throw new Error('Missing encrypted payload fields.');
+    }
+    const decode = (value: string): ArrayBuffer => {
+      const decoded = Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+      const buffer = new ArrayBuffer(decoded.byteLength);
+      new Uint8Array(buffer).set(decoded);
+      return buffer;
+    };
+    iv = decode(payload.iv);
+    ciphertext = decode(payload.ciphertext);
+    if (iv.byteLength !== 12 || ciphertext.byteLength < 16) {
+      throw new Error('Invalid encrypted payload length.');
+    }
+  } catch {
+    throw new MessageDecryptionError('malformed-payload');
+  }
+
+  try {
+    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(iv) }, key, ciphertext);
+    return new TextDecoder().decode(plaintext);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'OperationError') {
+      throw new MessageDecryptionError('authentication-failed');
+    }
+    throw new MessageDecryptionError('decryption-failed');
+  }
 }
 
 // --- Group E2EE support: a raw symmetric key that gets "wrapped" (encrypted)

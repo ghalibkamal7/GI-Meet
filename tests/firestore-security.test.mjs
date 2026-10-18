@@ -18,6 +18,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 
 const rules = await readFile('firestore.rules', 'utf8');
@@ -198,6 +199,49 @@ try {
   await seedFixtures();
 
   console.log('Direct chats: only the sender can change message content');
+  const messagePayload = {
+    chatId: 'alice_bob',
+    senderId: 'alice',
+    text: 'ciphertext-placeholder',
+    createdAt: 2,
+    editedAt: null,
+    readBy: ['alice'],
+    replyTo: null,
+    forwardedFrom: null,
+    deleted: false,
+    attachment: null,
+    reactions: {},
+    reactionUsers: {},
+    starredBy: [],
+    encrypted: true,
+    iv: 'AA==',
+  };
+  const memberSend = writeBatch(alice);
+  memberSend.set(doc(alice, 'chats/alice_bob/messages/alice-send'), messagePayload);
+  memberSend.update(doc(alice, 'chats/alice_bob'), {
+    lastMessage: '🔒 Encrypted message',
+    lastMessageCipher: 'ciphertext-placeholder',
+    lastMessageIv: 'AA==',
+    lastMessageAt: 2,
+    lastMessageSenderId: 'alice',
+    hiddenFor: [],
+  });
+  await assertSucceeds(memberSend.commit());
+
+  const outsiderSend = writeBatch(outsider);
+  outsiderSend.set(doc(outsider, 'chats/alice_bob/messages/outsider-send'), {
+    ...messagePayload,
+    senderId: 'mallory',
+  });
+  outsiderSend.update(doc(outsider, 'chats/alice_bob'), {
+    lastMessage: 'Unauthorized',
+    lastMessageAt: 3,
+    lastMessageSenderId: 'mallory',
+  });
+  await assertFails(outsiderSend.commit());
+  const rejectedMessage = await assertSucceeds(getDoc(doc(alice, 'chats/alice_bob/messages/outsider-send')));
+  if (rejectedMessage.exists()) throw new Error('Rejected batch left an unauthorized message behind.');
+
   await assertSucceeds(updateDoc(doc(alice, 'chats/alice_bob/messages/alice-message'), { text: 'Edited by Alice' }));
   await assertFails(updateDoc(doc(bob, 'chats/alice_bob/messages/alice-message'), { text: 'Changed by Bob' }));
   await assertFails(updateDoc(doc(bob, 'chats/alice_bob/messages/alice-message'), { senderId: 'bob' }));

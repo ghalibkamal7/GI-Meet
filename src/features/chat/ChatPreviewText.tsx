@@ -5,8 +5,6 @@ import { getSharedKeyForChat, decryptForChat } from './e2ee';
 import { neutralizePreview } from './previewText';
 import type { Chat } from './chatTypes';
 
-// decryptForChat() returns a "⚠️ Could not decrypt..." sentinel instead of throwing — never show that as a preview.
-const DECRYPT_FAILED_PREFIX = '⚠️ Could not decrypt';
 const MAX_CACHED_PREVIEWS = 200;
 const MAX_PREVIEW_CHARS = 120;
 
@@ -73,7 +71,6 @@ export function ChatPreviewText({ chat }: { chat: Chat }) {
         const sharedKey = await getSharedKeyForChat(privateKey, otherUid);
         if (!sharedKey) return;
         const plaintext = await decryptForChat(sharedKey, { ciphertext: cipher, iv });
-        if (plaintext.startsWith(DECRYPT_FAILED_PREFIX)) return;
         const preview = plaintext.replace(/\s+/g, ' ').trim().slice(0, MAX_PREVIEW_CHARS);
         rememberPreview(cacheKey, preview);
         if (!cancelled) setDecrypted(preview);

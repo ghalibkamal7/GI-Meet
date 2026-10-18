@@ -18,7 +18,15 @@ import {
   isUserBlocked,
   searchMessagesLocally,
 } from './chatService';
-import { ensureDeviceKeys, getSharedKeyForChat, encryptForChat, decryptForChat, decryptAttachmentUrl } from './e2ee';
+import {
+  ensureDeviceKeys,
+  getSharedKeyForChat,
+  encryptForChat,
+  decryptForChat,
+  decryptAttachmentUrl,
+  messageDecryptionFallback,
+  DeviceEncryptionKeyError,
+} from './e2ee';
 import { createCall } from '../calls/callService';
 import type { Chat, Message } from './chatTypes';
 import { MessageBubble } from '../../components/common/MessageBubble';
@@ -47,6 +55,7 @@ export function ChatWindow() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   const [encryptionReady, setEncryptionReady] = useState(false);
+  const [encryptionError, setEncryptionError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
@@ -89,6 +98,7 @@ export function ChatWindow() {
     setMessages([]);
     setChatError(null);
     setEncryptionReady(false);
+    setEncryptionError(null);
     setSharedKey(null);
     setReadMeta(null);
     setPolls([]);
@@ -158,12 +168,23 @@ export function ChatWindow() {
     if (!chat || !profile) return;
     let cancelled = false;
     (async () => {
-      const myPrivateKey = await ensureDeviceKeys(profile.uid);
-      const otherUid = chat.participants.find((p) => p !== profile.uid);
-      const key = otherUid ? await getSharedKeyForChat(myPrivateKey, otherUid) : null;
-      if (!cancelled) {
-        setSharedKey(key);
-        setEncryptionReady(true);
+      try {
+        const myPrivateKey = await ensureDeviceKeys(profile.uid);
+        const otherUid = chat.participants.find((p) => p !== profile.uid);
+        const key = otherUid ? await getSharedKeyForChat(myPrivateKey, otherUid) : null;
+        if (!cancelled) {
+          setSharedKey(key);
+          setEncryptionError(null);
+          setEncryptionReady(true);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSharedKey(null);
+          setEncryptionError(error instanceof DeviceEncryptionKeyError
+            ? error.message
+            : 'Could not prepare encryption keys. Check your connection and try again.');
+          setEncryptionReady(true);
+        }
       }
     })();
     return () => {
@@ -184,17 +205,19 @@ export function ChatWindow() {
           let attachment = m.attachment;
 
           if (m.encrypted) {
-            text = sharedKey
-              ? await decryptForChat(sharedKey, { ciphertext: m.text, iv: m.iv ?? '' })
-              : '🔒 Encrypted message (key unavailable)';
+            try {
+              text = await decryptForChat(sharedKey, { ciphertext: m.text, iv: m.iv ?? '' });
+            } catch (error) {
+              text = messageDecryptionFallback(error);
+            }
           }
 
-          if (replyTo?.iv && sharedKey) {
+          if (replyTo?.iv) {
             try {
               const replyText = await decryptForChat(sharedKey, { ciphertext: replyTo.text, iv: replyTo.iv });
               replyTo = { ...replyTo, text: replyText };
-            } catch {
-              // Leave the quoted preview as-is if it can't be decrypted for any reason.
+            } catch (error) {
+              replyTo = { ...replyTo, text: messageDecryptionFallback(error) };
             }
           }
 
@@ -325,6 +348,7 @@ export function ChatWindow() {
   const searchResults = showSearch ? searchMessagesLocally(messages, searchTerm) : [];
 
   async function handleSend(text: string) {
+    if (encryptionError) throw new Error(encryptionError);
     let payloadText = text;
     let encrypted = false;
     let iv: string | undefined;
@@ -607,7 +631,13 @@ export function ChatWindow() {
         </div>
       )}
 
-      {!blocked && (
+      {encryptionError && (
+        <p role="alert" style={{ margin: '0 16px 8px', color: 'var(--color-danger)', fontSize: 13 }}>
+          {encryptionError}
+        </p>
+      )}
+
+      {!blocked && !encryptionError && (
         <MessageComposer
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
