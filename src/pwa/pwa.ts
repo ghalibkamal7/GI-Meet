@@ -119,6 +119,7 @@ export function usePwa(): PwaSnapshot {
 // ---------------------------------------------------------------------------
 
 export function dismissInstallPrompt(days: number = DISMISS_DAYS): void {
+  deferredPrompt = null;
   try {
     window.localStorage.setItem(DISMISS_KEY, String(Date.now() + days * 24 * 60 * 60 * 1000));
   } catch {
@@ -133,15 +134,24 @@ export async function promptInstall(): Promise<'accepted' | 'dismissed' | 'unava
   deferredPrompt = null; // a captured prompt can only be used once
   emit();
 
-  await prompt.prompt();
-  const { outcome } = await prompt.userChoice;
-  if (outcome === 'dismissed') dismissInstallPrompt();
-  return outcome;
+  try {
+    await prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'dismissed') dismissInstallPrompt();
+    return outcome;
+  } finally {
+    // Always discard the one-shot event, including when prompt() rejects.
+    deferredPrompt = null;
+    emit();
+  }
 }
 
 function attachInstallListeners(): void {
   window.addEventListener('beforeinstallprompt', (event: Event) => {
-    event.preventDefault(); // keep the browser's mini-infobar out; our own UI decides when to ask
+    // If the user dismissed our custom install card, leave installation UI to
+    // the browser rather than suppressing it without offering another action.
+    if (readInstallDismissed()) return;
+    event.preventDefault(); // The custom Install button triggers the deferred prompt.
     deferredPrompt = event as BeforeInstallPromptEvent;
     emit();
   });

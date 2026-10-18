@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Plus, RefreshCw, Share, X } from 'lucide-react';
 import {
   applyUpdate,
@@ -24,6 +24,9 @@ export function PwaPrompts() {
   const [delayElapsed, setDelayElapsed] = useState(false);
   const [updateDeferred, setUpdateDeferred] = useState(false);
   const [risk, setRisk] = useState<UpdateRisk | null>(null);
+  const [installPending, setInstallPending] = useState(false);
+  const [installError, setInstallError] = useState('');
+  const installPendingRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDelayElapsed(true), INSTALL_PROMPT_DELAY_MS);
@@ -33,7 +36,9 @@ export function PwaPrompts() {
   // isInstalled already folds in "running inside the native app", so none of
   // the install UI can appear there; canInstall / showIosInstructions are
   // both false whenever the app is installed.
-  const showInstall = delayElapsed && pwa.canInstall && !pwa.installDismissed;
+  const showInstall = delayElapsed &&
+    (pwa.canInstall || installPending || installError !== '') &&
+    !pwa.installDismissed;
   const showIosSteps = delayElapsed && pwa.showIosInstructions && !pwa.installDismissed;
   const showUpdate = pwa.updateAvailable && !updateDeferred;
 
@@ -44,6 +49,26 @@ export function PwaPrompts() {
       return;
     }
     applyUpdate();
+  }
+
+  async function handleInstallClick() {
+    if (installPendingRef.current) return;
+    installPendingRef.current = true;
+    setInstallPending(true);
+    setInstallError('');
+
+    try {
+      const outcome = await promptInstall();
+      if (outcome === 'unavailable') {
+        setInstallError('The browser install prompt is no longer available. Please reload and try again.');
+      }
+    } catch (error) {
+      console.error('[pwa] Install prompt failed', error);
+      setInstallError('The install prompt could not be opened. Please try again later.');
+    } finally {
+      installPendingRef.current = false;
+      setInstallPending(false);
+    }
   }
 
   return (
@@ -77,12 +102,25 @@ export function PwaPrompts() {
               <strong>Install GI Meet</strong>
               <span>Add it to your device for quick access and a full-screen experience.</span>
             </div>
+            {installError && <p className="gi-pwa-error" role="alert">{installError}</p>}
             <div className="gi-pwa-actions">
-              <button type="button" className="rb-btn rb-btn--primary gi-pwa-btn" onClick={() => void promptInstall()}>
-                <Download size={15} strokeWidth={1.75} aria-hidden="true" /> Install
-              </button>
-              <button type="button" className="rb-btn rb-btn--outline gi-pwa-btn" onClick={() => dismissInstallPrompt()}>
-                Not now
+              {(pwa.canInstall || installPending) && (
+                <button
+                  type="button"
+                  className="rb-btn rb-btn--primary gi-pwa-btn"
+                  onClick={() => void handleInstallClick()}
+                  disabled={installPending}
+                >
+                  {!installPending && <Download size={15} strokeWidth={1.75} aria-hidden="true" />}
+                  {installPending ? 'Opening…' : 'Install'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="rb-btn rb-btn--outline gi-pwa-btn"
+                onClick={() => dismissInstallPrompt()}
+              >
+                {installError ? 'Close' : 'Not now'}
               </button>
             </div>
           </div>
@@ -146,6 +184,7 @@ export function PwaPrompts() {
         .gi-pwa-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; font-size: 13px; }
         .gi-pwa-text strong { font-size: 14px; }
         .gi-pwa-text span { color: var(--color-text-muted); }
+        .gi-pwa-error { margin: 0; color: var(--color-danger); font-size: 12px; line-height: 1.45; }
         .gi-pwa-steps { margin: 6px 0 0; padding-left: 18px; color: var(--color-text-muted); line-height: 1.7; }
         .gi-pwa-steps svg { vertical-align: -2px; }
         .gi-pwa-actions { display: flex; gap: 8px; }
