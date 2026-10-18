@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { MessageCircle, Phone, Video, Users, Sparkles, Settings } from 'lucide-react';
+import { MessageCircle, Phone, Video, Users, Sparkles } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Chats', Icon: MessageCircle, end: true },
@@ -7,7 +7,6 @@ const NAV_ITEMS = [
   { to: '/meetings', label: 'Meetings', Icon: Video },
   { to: '/groups', label: 'Groups', Icon: Users },
   { to: '/spot', label: 'Spot', Icon: Sparkles },
-  { to: '/settings', label: 'Settings', Icon: Settings },
 ];
 
 export function BottomNav() {

@@ -249,6 +249,323 @@ select {
   padding: 24px clamp(14px, 2.2vw, 28px);
 }
 
+.rb-chats-page {
+  padding-top: 12px;
+}
+
+.rb-chats-app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  margin: 0 4px 14px;
+}
+
+.rb-chats-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.rb-chats-brand img,
+.rb-chats-brand svg {
+  flex: 0 0 auto;
+}
+
+.rb-chats-app-menu,
+.rb-request-notifications {
+  position: relative;
+}
+
+.rb-chats-app-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.rb-chats-app-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rb-chats-app-menu__panel {
+  position: absolute;
+  z-index: 45;
+  top: calc(100% + 7px);
+  right: 0;
+  width: 190px;
+  padding: 5px;
+}
+
+.rb-chats-app-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: inherit;
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rb-chats-app-menu__item:hover,
+.rb-chats-app-menu__item:focus-visible {
+  background: var(--color-surface-alt);
+}
+
+.rb-chats-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px 20px;
+}
+
+.rb-chats-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.rb-chats-search:focus-within {
+  border-color: var(--color-brand-600);
+  box-shadow: var(--focus-ring);
+}
+
+.rb-chats-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.rb-chats-search input:focus-visible {
+  box-shadow: none;
+}
+
+.rb-chats-people-search {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.rb-chats-people-search:hover {
+  background: var(--color-surface-alt);
+}
+
+.rb-chats-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 12px;
+}
+
+.rb-chats-controls h1 {
+  margin: 0;
+}
+
+.rb-chats-controls__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.rb-request-bell {
+  position: relative;
+}
+
+.rb-request-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid var(--color-surface);
+  border-radius: 999px;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rb-request-panel {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(390px, calc(100vw - 24px));
+  max-height: min(540px, calc(100dvh - 150px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rb-request-panel__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.rb-request-panel__header h2 {
+  font-family: var(--font-body);
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.rb-request-panel__header > span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.rb-request-panel__list {
+  padding: 0 14px;
+}
+
+.rb-request-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rb-request-item:last-child {
+  border-bottom: 0;
+}
+
+.rb-request-item__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rb-request-avatar {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-brand-100);
+  color: var(--color-brand-600);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.rb-request-item__name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.rb-request-item__name strong,
+.rb-request-item__name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-request-item__name span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.rb-request-item__actions {
+  display: flex;
+  gap: 8px;
+  padding-left: 48px;
+}
+
+.rb-request-item__actions .rb-btn {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.rb-request-item--outgoing {
+  padding-block: 14px;
+}
+
+.rb-request-panel__state,
+.rb-request-panel__error {
+  margin: 0;
+  padding: 18px 16px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.rb-request-panel__error {
+  color: var(--color-danger);
+}
+
+.rb-request-panel__failure {
+  padding-bottom: 14px;
+}
+
+.rb-request-panel__failure .rb-btn {
+  min-height: 36px;
+  margin: 0 16px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.rb-chat-list-item {
+  min-height: 72px;
+  transition: background 0.12s ease;
+}
+
+.rb-chat-list-item:hover,
+.rb-chat-list-item:focus-visible {
+  background: var(--color-surface-alt) !important;
+}
+
 .rb-meetings-page > h2 {
   margin-top: 28px !important;
 }
@@ -599,6 +916,40 @@ select {
 }
 
 @media (max-width: 768px) {
+  .rb-chats-page {
+    padding: 10px 12px 18px;
+  }
+
+  .rb-chats-app-header {
+    margin: 0 2px 12px;
+  }
+
+  .rb-chats-search-row {
+    margin: 0 2px 18px;
+  }
+
+  .rb-chats-controls {
+    align-items: center;
+    padding: 0 2px 10px;
+  }
+
+  .rb-chats-controls__actions {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .rb-chats-controls__actions > .rb-btn {
+    min-height: 40px;
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .rb-chat-list-item {
+    margin-inline: -12px;
+    width: calc(100% + 24px) !important;
+    padding-inline: 16px !important;
+  }
+
   .rb-page {
     padding: 20px 16px;
   }

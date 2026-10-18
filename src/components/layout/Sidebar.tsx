@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { MessageCircle, Phone, Video, Users, Sparkles, Settings, Search, LogOut } from 'lucide-react';
+import { MessageCircle, Phone, Video, Users, Sparkles, Search, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { appConfig } from '../../config/appConfig';
 import { BrandMark } from '../common/BrandMark';
@@ -10,7 +10,6 @@ const NAV_ITEMS = [
   { to: '/meetings', label: 'Meetings', Icon: Video },
   { to: '/groups', label: 'Groups', Icon: Users },
   { to: '/spot', label: 'Spot', Icon: Sparkles },
-  { to: '/settings', label: 'Settings', Icon: Settings },
 ];
 
 export function Sidebar() {
