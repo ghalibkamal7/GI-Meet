@@ -33,14 +33,9 @@ export async function getPrivateKey(uid: string): Promise<CryptoKey | null> {
   if (!isNativePlatform()) {
     return getWebPrivateKey(uid);
   }
-  try {
-    const SecureStorage = await getSecureStoragePlugin();
-    const jwkString = await SecureStorage.get(`${PRIVATE_KEY_STORAGE_KEY_PREFIX}${uid}`);
-    if (!jwkString) return null;
-    return await importPrivateKeyFromJwk(jwkString as string);
-  } catch {
-    // Key doesn't exist yet in secure storage — treat like "no key found" so
-    // ensureDeviceKeys() generates a fresh one, same as the web path.
-    return null;
-  }
+  const SecureStorage = await getSecureStoragePlugin();
+  const jwkString = await SecureStorage.get(`${PRIVATE_KEY_STORAGE_KEY_PREFIX}${uid}`);
+  if (!jwkString) return null;
+  if (typeof jwkString !== 'string') throw new Error('Stored encryption key has an invalid format.');
+  return importPrivateKeyFromJwk(jwkString);
 }

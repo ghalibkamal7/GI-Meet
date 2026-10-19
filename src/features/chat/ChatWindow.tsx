@@ -26,6 +26,7 @@ import {
   decryptAttachmentUrl,
   messageDecryptionFallback,
   DeviceEncryptionKeyError,
+  DeviceEncryptionKeyStorageError,
 } from './e2ee';
 import { createCall } from '../calls/callService';
 import type { Chat, Message } from './chatTypes';
@@ -180,7 +181,7 @@ export function ChatWindow() {
       } catch (error) {
         if (!cancelled) {
           setSharedKey(null);
-          setEncryptionError(error instanceof DeviceEncryptionKeyError
+          setEncryptionError(error instanceof DeviceEncryptionKeyError || error instanceof DeviceEncryptionKeyStorageError
             ? error.message
             : 'Could not prepare encryption keys. Check your connection and try again.');
           setEncryptionReady(true);

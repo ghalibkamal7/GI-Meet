@@ -31,6 +31,13 @@ export class DeviceEncryptionKeyError extends Error {
   }
 }
 
+export class DeviceEncryptionKeyStorageError extends Error {
+  constructor() {
+    super('Could not access this device’s encryption-key storage. No key was changed. Check device storage availability and retry.');
+    this.name = 'DeviceEncryptionKeyStorageError';
+  }
+}
+
 async function exportPublicKeyForPrivateKey(privateKey: CryptoKey): Promise<string> {
   const jwk: Record<string, unknown> = { ...await crypto.subtle.exportKey('jwk', privateKey) };
   delete jwk.d;
@@ -49,7 +56,12 @@ export async function ensureDeviceKeys(uid: string): Promise<CryptoKey> {
   if (pending) return pending;
 
   const task = (async () => {
-    const privateKey = await getPrivateKey(uid);
+    let privateKey: CryptoKey | null;
+    try {
+      privateKey = await getPrivateKey(uid);
+    } catch {
+      throw new DeviceEncryptionKeyStorageError();
+    }
     const userSnapshot = await getDoc(doc(db, 'users', uid));
     const remotePublicKey = publishedKey(userSnapshot.data());
     const localPublicKey = privateKey ? await exportPublicKeyForPrivateKey(privateKey) : null;
