@@ -203,7 +203,13 @@ service cloud.firestore {
               && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == request.auth.uid;
       allow update: if isSignedIn() && request.auth.uid == uid
               && request.resource.data.uid == uid
-              && request.resource.data.username == resource.data.username;
+              && request.resource.data.username == resource.data.username
+              && (
+                'publicKeyJwk' in resource.data
+                  ? resource.data.publicKeyJwk == null
+                    || request.resource.data.publicKeyJwk == resource.data.publicKeyJwk
+                  : true
+              );
       allow delete: if false;
 
       match /callHistory/{entryId} {

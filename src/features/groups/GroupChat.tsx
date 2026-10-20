@@ -22,13 +22,14 @@ import {
   decryptAttachmentUrl,
   messageDecryptionFallback,
   DeviceEncryptionKeyError,
+  DeviceEncryptionKeyStorageError,
 } from '../chat/e2ee';
 import type { Group, Announcement } from './groupTypes';
 import type { Message } from '../chat/chatTypes';
 import { MessageBubble } from '../../components/common/MessageBubble';
 import { MessageComposer } from '../../components/common/MessageComposer';
 import { ForwardMessageModal } from '../../components/common/ForwardMessageModal';
-import { uploadFile, uploadEncryptedFile } from '../../services/storageService';
+import { uploadEncryptedFile } from '../../services/storageService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { GroupInfoPanel } from './GroupInfoPanel';
 import { createMeeting } from '../meetings/meetingService';
@@ -92,6 +93,11 @@ export function GroupChat() {
       try {
         const myPrivateKey = await ensureDeviceKeys(profile.uid);
         const key = await getMyGroupKey(groupId, profile.uid, myPrivateKey);
+        if (!key) {
+          throw new DeviceEncryptionKeyError(
+            'This device cannot access the group encryption key. Sending is disabled until the existing account key and group key are available.'
+          );
+        }
         if (!cancelled) {
           setGroupKey(key);
           setEncryptionError(null);
@@ -100,7 +106,7 @@ export function GroupChat() {
       } catch (error) {
         if (!cancelled) {
           setGroupKey(null);
-          setEncryptionError(error instanceof DeviceEncryptionKeyError
+          setEncryptionError(error instanceof DeviceEncryptionKeyError || error instanceof DeviceEncryptionKeyStorageError
             ? error.message
             : 'Could not prepare group encryption keys. Check your connection and try again.');
           setEncryptionReady(true);
@@ -190,18 +196,14 @@ export function GroupChat() {
 
   async function handleSend(text: string) {
     if (encryptionError) throw new Error(encryptionError);
-    let payloadText = text;
-    let encrypted = false;
-    let iv: string | undefined;
-    if (groupKey) {
-      const enc = await encryptForChat(groupKey, text);
-      payloadText = enc.ciphertext;
-      encrypted = true;
-      iv = enc.iv;
-    }
+    if (!groupKey) throw new Error('Group encryption is not ready. Sending is disabled until the group key is available.');
+    const enc = await encryptForChat(groupKey, text);
+    const payloadText = enc.ciphertext;
+    const encrypted = true;
+    const iv = enc.iv;
 
     if (editingMessage) {
-      await editGroupMessage(groupId!, editingMessage.id, payloadText, encrypted ? { encrypted: true, iv: iv! } : undefined);
+      await editGroupMessage(groupId!, editingMessage.id, payloadText, { encrypted: true, iv });
       setEditingMessage(null);
       return;
     }
@@ -209,7 +211,7 @@ export function GroupChat() {
     let replyToPayload = replyingTo
       ? { messageId: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId }
       : undefined;
-    if (replyToPayload && groupKey) {
+    if (replyToPayload) {
       const encReply = await encryptForChat(groupKey, replyToPayload.text);
       replyToPayload = { ...replyToPayload, text: encReply.ciphertext, iv: encReply.iv } as typeof replyToPayload & { iv: string };
     }
@@ -226,26 +228,23 @@ export function GroupChat() {
   }
 
   async function handleSendFile(file: File) {
+    if (!groupKey || encryptionError) {
+      showToast(encryptionError ?? 'Group encryption is not ready. The file was not sent.', 'error');
+      return;
+    }
     setUploading(true);
     try {
       const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
       let result;
-      let encrypted = false;
-      let iv: string | undefined;
-
-      if (groupKey) {
-        result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
-        encrypted = true;
-        iv = result.iv;
-      } else {
-        const { promise } = uploadFile(file, `groups/${groupId}`);
-        result = await promise;
-      }
+      result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
+      const encrypted = true;
+      const iv = result.iv;
 
       await sendGroupMessage({
         groupId: groupId!,
         senderId: profile!.uid,
         text: '',
+        encrypted: true,
         attachment: { type, url: result.url, name: result.name, sizeBytes: result.sizeBytes, mimeType: result.mimeType, encrypted, iv },
       });
     } catch (err) {
@@ -256,26 +255,23 @@ export function GroupChat() {
   }
 
   async function handleSendVoice(blob: Blob, durationSeconds: number) {
+    if (!groupKey || encryptionError) {
+      showToast(encryptionError ?? 'Group encryption is not ready. The voice message was not sent.', 'error');
+      return;
+    }
     setUploading(true);
     try {
       const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
       let result;
-      let encrypted = false;
-      let iv: string | undefined;
-
-      if (groupKey) {
-        result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
-        encrypted = true;
-        iv = result.iv;
-      } else {
-        const { promise } = uploadFile(file, `groups/${groupId}`);
-        result = await promise;
-      }
+      result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
+      const encrypted = true;
+      const iv = result.iv;
 
       await sendGroupMessage({
         groupId: groupId!,
         senderId: profile!.uid,
         text: '',
+        encrypted: true,
         attachment: { type: 'audio', url: result.url, name: 'Voice message', sizeBytes: result.sizeBytes, mimeType: result.mimeType, durationSeconds, encrypted, iv },
       });
     } catch (err) {

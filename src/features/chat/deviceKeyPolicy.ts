@@ -32,6 +32,33 @@ function publicKeyCoordinates(jwk: string | null): PublicKeyCoordinates | null {
   }
 }
 
+export function publicKeysMatch(leftJwk: string | null, rightJwk: string | null): boolean {
+  const left = publicKeyCoordinates(leftJwk);
+  const right = publicKeyCoordinates(rightJwk);
+  return Boolean(
+    left &&
+    right &&
+    left.kty === right.kty &&
+    left.crv === right.crv &&
+    left.x === right.x &&
+    left.y === right.y
+  );
+}
+
+export function chooseRegisteredPublicKey(
+  currentValue: unknown,
+  proposedPublicKeyJwk: string
+): { publicKeyJwk: string; shouldRegister: boolean } {
+  if (!proposedPublicKeyJwk.trim()) throw new Error('A public encryption key is required.');
+  if (currentValue === undefined || currentValue === null || currentValue === '') {
+    return { publicKeyJwk: proposedPublicKeyJwk, shouldRegister: true };
+  }
+  if (typeof currentValue === 'string' && currentValue.trim()) {
+    return { publicKeyJwk: currentValue, shouldRegister: false };
+  }
+  throw new Error('The registered encryption key has an invalid format and was not changed.');
+}
+
 export function decideDeviceKeyAction(
   hasLocalPrivateKey: boolean,
   localPublicKeyJwk: string | null,
@@ -42,14 +69,7 @@ export function decideDeviceKeyAction(
   }
   if (!publishedPublicKeyJwk) return 'publish-local-key';
 
-  const localCoordinates = publicKeyCoordinates(localPublicKeyJwk);
-  const publishedCoordinates = publicKeyCoordinates(publishedPublicKeyJwk);
-  if (!localCoordinates || !publishedCoordinates) return 'resolve-key-mismatch';
-
-  return localCoordinates.kty === publishedCoordinates.kty &&
-    localCoordinates.crv === publishedCoordinates.crv &&
-    localCoordinates.x === publishedCoordinates.x &&
-    localCoordinates.y === publishedCoordinates.y
+  return publicKeysMatch(localPublicKeyJwk, publishedPublicKeyJwk)
     ? 'use-local-key'
     : 'resolve-key-mismatch';
 }

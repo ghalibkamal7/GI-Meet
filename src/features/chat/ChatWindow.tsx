@@ -34,7 +34,7 @@ import { MessageBubble } from '../../components/common/MessageBubble';
 import { MessageComposer } from '../../components/common/MessageComposer';
 import { ForwardMessageModal } from '../../components/common/ForwardMessageModal';
 import { ChatOptionsMenu } from '../../components/common/ChatOptionsMenu';
-import { uploadFile, uploadEncryptedFile } from '../../services/storageService';
+import { uploadEncryptedFile } from '../../services/storageService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { usePresence } from '../../hooks/usePresence';
 import { Search, BarChart3, Phone, Video, MoreVertical, Pin, Lock, ArrowLeft } from 'lucide-react';
@@ -168,11 +168,20 @@ export function ChatWindow() {
   useEffect(() => {
     if (!chat || !profile) return;
     let cancelled = false;
+    setSharedKey(null);
+    setEncryptionError(null);
+    setEncryptionReady(false);
     (async () => {
       try {
         const myPrivateKey = await ensureDeviceKeys(profile.uid);
         const otherUid = chat.participants.find((p) => p !== profile.uid);
-        const key = otherUid ? await getSharedKeyForChat(myPrivateKey, otherUid) : null;
+        if (!otherUid) throw new DeviceEncryptionKeyError('This chat does not have a valid second participant.');
+        const key = await getSharedKeyForChat(myPrivateKey, otherUid);
+        if (!key) {
+          throw new DeviceEncryptionKeyError(
+            'Chat encryption is unavailable because the other participant has not registered an encryption key. Sending is disabled to protect your messages.'
+          );
+        }
         if (!cancelled) {
           setSharedKey(key);
           setEncryptionError(null);
@@ -350,18 +359,15 @@ export function ChatWindow() {
 
   async function handleSend(text: string) {
     if (encryptionError) throw new Error(encryptionError);
-    let payloadText = text;
-    let encrypted = false;
-    let iv: string | undefined;
-    if (sharedKey) {
-      const enc = await encryptForChat(sharedKey, text);
-      payloadText = enc.ciphertext;
-      encrypted = true;
-      iv = enc.iv;
-    }
+    if (!sharedKey) throw new Error('Chat encryption is not ready. Sending is disabled until the encryption key is available.');
+    let payloadText: string;
+    const enc = await encryptForChat(sharedKey, text);
+    payloadText = enc.ciphertext;
+    const encrypted = true;
+    const iv = enc.iv;
 
     if (editingMessage) {
-      await editMessage(chatId!, editingMessage.id, payloadText, encrypted ? { encrypted: true, iv: iv! } : undefined);
+      await editMessage(chatId!, editingMessage.id, payloadText, { encrypted: true, iv });
       setEditingMessage(null);
       return;
     }
@@ -369,7 +375,7 @@ export function ChatWindow() {
     let replyToPayload = replyingTo
       ? { messageId: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId }
       : undefined;
-    if (replyToPayload && sharedKey) {
+    if (replyToPayload) {
       const encReply = await encryptForChat(sharedKey, replyToPayload.text);
       replyToPayload = { ...replyToPayload, text: encReply.ciphertext, iv: encReply.iv } as typeof replyToPayload & { iv: string };
     }
@@ -386,26 +392,23 @@ export function ChatWindow() {
   }
 
   async function handleSendFile(file: File) {
+    if (!sharedKey || encryptionError) {
+      showToast(encryptionError ?? 'Chat encryption is not ready. The file was not sent.', 'error');
+      return;
+    }
     setUploading(true);
     try {
       const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
       let result;
-      let encrypted = false;
-      let iv: string | undefined;
-
-      if (sharedKey) {
-        result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
-        encrypted = true;
-        iv = result.iv;
-      } else {
-        const { promise } = uploadFile(file, `chats/${chatId}`);
-        result = await promise;
-      }
+      result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
+      const encrypted = true;
+      const iv = result.iv;
 
       await sendMessage({
         chatId: chatId!,
         senderId: profile!.uid,
         text: '',
+        encrypted: true,
         attachment: { type, url: result.url, name: result.name, sizeBytes: result.sizeBytes, mimeType: result.mimeType, encrypted, iv },
       });
     } catch (err) {
@@ -416,26 +419,23 @@ export function ChatWindow() {
   }
 
   async function handleSendVoice(blob: Blob, durationSeconds: number) {
+    if (!sharedKey || encryptionError) {
+      showToast(encryptionError ?? 'Chat encryption is not ready. The voice message was not sent.', 'error');
+      return;
+    }
     setUploading(true);
     try {
       const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
       let result;
-      let encrypted = false;
-      let iv: string | undefined;
-
-      if (sharedKey) {
-        result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
-        encrypted = true;
-        iv = result.iv;
-      } else {
-        const { promise } = uploadFile(file, `chats/${chatId}`);
-        result = await promise;
-      }
+      result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
+      const encrypted = true;
+      const iv = result.iv;
 
       await sendMessage({
         chatId: chatId!,
         senderId: profile!.uid,
         text: '',
+        encrypted: true,
         attachment: { type: 'audio', url: result.url, name: 'Voice message', sizeBytes: result.sizeBytes, mimeType: result.mimeType, durationSeconds, encrypted, iv },
       });
     } catch (err) {

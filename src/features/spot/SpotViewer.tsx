@@ -3,6 +3,8 @@ import { X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { markSpotViewed, reactToSpot, deleteSpot } from './spotService';
 import { getOrCreateDirectChat, sendMessage } from '../chat/chatService';
+import { ensureDeviceKeys, getSharedKeyForChat, encryptForChat } from '../chat/e2ee';
+import { useToast } from '../../context/ToastContext';
 import type { Spot } from './spotTypes';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 
@@ -11,6 +13,7 @@ const REACT_EMOJIS = ['😀', '🔥', '❤️', '😢', '👏'];
 
 export function SpotViewer({ spots, startIndex, onClose }: { spots: Spot[]; startIndex: number; onClose: () => void }) {
   const { profile } = useAuth();
+  const { showToast } = useToast();
   const [index, setIndex] = useState(startIndex);
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
@@ -46,14 +49,28 @@ export function SpotViewer({ spots, startIndex, onClose }: { spots: Spot[]; star
 
   async function handleReply() {
     if (!profile || !replyText.trim() || !spot) return;
-    const chatId = await getOrCreateDirectChat(
-      profile.uid,
-      { displayName: profile.displayName, photoURL: profile.photoURL },
-      spot.uid,
-      { displayName: spot.authorName, photoURL: spot.authorPhoto }
-    );
-    await sendMessage({ chatId, senderId: profile.uid, text: `Re your Spot: ${replyText}` });
-    setReplyText('');
+    try {
+      const chatId = await getOrCreateDirectChat(
+        profile.uid,
+        { displayName: profile.displayName, photoURL: profile.photoURL },
+        spot.uid,
+        { displayName: spot.authorName, photoURL: spot.authorPhoto }
+      );
+      const myPrivateKey = await ensureDeviceKeys(profile.uid);
+      const sharedKey = await getSharedKeyForChat(myPrivateKey, spot.uid);
+      if (!sharedKey) throw new Error('The recipient has not registered an encryption key. Your reply was not sent.');
+      const encrypted = await encryptForChat(sharedKey, `Re your Spot: ${replyText}`);
+      await sendMessage({
+        chatId,
+        senderId: profile.uid,
+        text: encrypted.ciphertext,
+        encrypted: true,
+        iv: encrypted.iv,
+      });
+      setReplyText('');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not send the reply securely.', 'error');
+    }
   }
 
   if (!spot || !profile) return null;

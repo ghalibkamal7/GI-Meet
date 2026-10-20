@@ -2,7 +2,6 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebaseConfig';
 import {
   generateKeyPair,
-  exportPublicKey,
   importPublicKey,
   deriveSharedKey,
   encryptText,
@@ -11,9 +10,9 @@ import {
   toBase64,
   type EncryptedPayload,
 } from '../../services/cryptoService';
-import { getPrivateKey, savePrivateKey } from '../../services/secureKeyStore';
-import { updateUserPublicKey } from '../../services/userService';
-import { decideDeviceKeyAction } from './deviceKeyPolicy';
+import { getPrivateKey, savePrivateKeyIfAbsent } from '../../services/secureKeyStore';
+import { registerUserPublicKeyIfAbsent } from '../../services/userService';
+import { decideDeviceKeyAction, publicKeysMatch } from './deviceKeyPolicy';
 
 export {
   MessageDecryptionError,
@@ -78,16 +77,33 @@ export async function ensureDeviceKeys(uid: string): Promise<CryptoKey> {
       );
     }
     if (action === 'use-local-key') return privateKey!;
-    if (action === 'publish-local-key') {
-      await updateUserPublicKey(uid, localPublicKey!);
-      return privateKey!;
+
+    if (action === 'create-initial-key') {
+      try {
+        const candidate = await generateKeyPair();
+        privateKey = await savePrivateKeyIfAbsent(uid, candidate.privateKey);
+      } catch {
+        throw new DeviceEncryptionKeyStorageError();
+      }
+      const candidatePublicKey = await exportPublicKeyForPrivateKey(privateKey);
+      await registerUserPublicKeyIfAbsent(uid, candidatePublicKey);
+      const latest = await getDoc(doc(db, 'users', uid));
+      if (!publicKeysMatch(candidatePublicKey, publishedKey(latest.data()))) {
+        throw new DeviceEncryptionKeyError(
+          'Another device registered a different encryption key first. Keep that device’s key and use its secure transfer option to enroll this device.'
+        );
+      }
+      return privateKey;
     }
 
-    const keyPair = await generateKeyPair();
-    const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
-    await savePrivateKey(uid, keyPair.privateKey);
-    await updateUserPublicKey(uid, publicKeyJwk);
-    return keyPair.privateKey;
+    await registerUserPublicKeyIfAbsent(uid, localPublicKey!);
+    const latest = await getDoc(doc(db, 'users', uid));
+    if (!publicKeysMatch(localPublicKey, publishedKey(latest.data()))) {
+      throw new DeviceEncryptionKeyError(
+        'This device key differs from the account’s registered key. The registered key was not changed; enroll this device using a secure transfer.'
+      );
+    }
+    return privateKey!;
   })();
 
   deviceKeyTasks.set(uid, task);

@@ -1,5 +1,9 @@
-import { isNativePlatform } from '../utils/platform';
-import { getPrivateKey as getWebPrivateKey, savePrivateKey as saveWebPrivateKey } from './keyStore';
+import { isNativePlatform } from '../utils/platform.ts';
+import {
+  getPrivateKey as getWebPrivateKey,
+  savePrivateKey as saveWebPrivateKey,
+  savePrivateKeyIfAbsent as saveWebPrivateKeyIfAbsent,
+} from './keyStore.ts';
 
 // Lazily imported so the web bundle never needs this native-only package
 // unless it's actually running on a device.
@@ -9,6 +13,7 @@ async function getSecureStoragePlugin() {
 }
 
 const PRIVATE_KEY_STORAGE_KEY_PREFIX = 'gi-meet-private-key-';
+const nativeSaveTasks = new Map<string, Promise<CryptoKey>>();
 
 async function exportPrivateKeyToJwk(key: CryptoKey): Promise<string> {
   const jwk = await crypto.subtle.exportKey('jwk', key);
@@ -27,6 +32,27 @@ export async function savePrivateKey(uid: string, key: CryptoKey): Promise<void>
   const SecureStorage = await getSecureStoragePlugin();
   const jwkString = await exportPrivateKeyToJwk(key);
   await SecureStorage.set(`${PRIVATE_KEY_STORAGE_KEY_PREFIX}${uid}`, jwkString);
+}
+
+export async function savePrivateKeyIfAbsent(uid: string, key: CryptoKey): Promise<CryptoKey> {
+  if (!isNativePlatform()) {
+    return saveWebPrivateKeyIfAbsent(uid, key);
+  }
+
+  const pending = nativeSaveTasks.get(uid);
+  if (pending) return pending;
+  const task = (async () => {
+    const existing = await getPrivateKey(uid);
+    if (existing) return existing;
+    await savePrivateKey(uid, key);
+    return key;
+  })();
+  nativeSaveTasks.set(uid, task);
+  try {
+    return await task;
+  } finally {
+    if (nativeSaveTasks.get(uid) === task) nativeSaveTasks.delete(uid);
+  }
 }
 
 export async function getPrivateKey(uid: string): Promise<CryptoKey | null> {

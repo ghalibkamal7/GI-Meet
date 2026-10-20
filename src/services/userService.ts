@@ -12,6 +12,7 @@ import { db } from '../firebase/firebaseConfig';
 import type { UserProfile } from '../utils/types';
 import { normalizeUsername } from '../utils/validators';
 import { createProfileInTransaction } from './profileTransaction';
+import { chooseRegisteredPublicKey } from '../features/chat/deviceKeyPolicy';
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, 'users', uid));
@@ -89,8 +90,14 @@ export async function updateProfileFields(
 }
 
 /** Publishes this device's E2EE public key so others can encrypt messages to this user. */
-export async function updateUserPublicKey(uid: string, publicKeyJwk: string): Promise<void> {
-  await setDoc(doc(db, 'users', uid), { publicKeyJwk }, { merge: true });
+export async function registerUserPublicKeyIfAbsent(uid: string, publicKeyJwk: string): Promise<void> {
+  await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, 'users', uid);
+    const snapshot = await transaction.get(userRef);
+    if (!snapshot.exists()) throw new Error('Cannot register an encryption key without an account profile.');
+    const decision = chooseRegisteredPublicKey(snapshot.data().publicKeyJwk, publicKeyJwk);
+    if (decision.shouldRegister) transaction.update(userRef, { publicKeyJwk: decision.publicKeyJwk });
+  });
 }
 
 export async function updatePrivacySettings(

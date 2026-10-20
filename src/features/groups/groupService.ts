@@ -242,14 +242,19 @@ export async function sendGroupMessage(params: {
   groupId: string;
   senderId: string;
   text: string;
-  encrypted?: boolean;
+  encrypted: true;
   iv?: string;
   replyTo?: Message['replyTo'];
   attachment?: Message['attachment'];
   forwardedFrom?: Message['forwardedFrom'];
 }): Promise<void> {
+  if (params.encrypted !== true) throw new Error('Group messages must be encrypted before sending.');
   const trimmed = params.text.trim();
   if (!trimmed && !params.attachment) return;
+  if (trimmed && !params.iv) throw new Error('Encrypted group messages require an initialization vector.');
+  if (params.attachment && (!params.attachment.encrypted || !params.attachment.iv)) {
+    throw new Error('Group attachments must be encrypted before sending.');
+  }
 
   await addDoc(collection(db, 'groups', params.groupId, 'messages'), {
     chatId: params.groupId,

@@ -8,6 +8,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -36,6 +37,8 @@ const outsider = env.authenticatedContext('mallory').firestore();
 async function seedFixtures() {
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
+    await setDoc(doc(db, 'users', 'alice'), { uid: 'alice', username: 'alice' });
+    await setDoc(doc(db, 'users', 'bob'), { uid: 'bob', username: 'bob', publicKeyJwk: null });
     await setDoc(doc(db, 'chats', 'alice_bob'), {
       participants: ['alice', 'bob'],
       participantInfo: {},
@@ -198,6 +201,18 @@ async function seedFixtures() {
 
 try {
   await seedFixtures();
+
+  console.log('Account encryption keys: first registration is allowed, replacement and removal are denied');
+  const aliceUserRef = doc(alice, 'users/alice');
+  const candidateKeyA = JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'candidate-a', y: 'candidate-a' });
+  const candidateKeyB = JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'candidate-b', y: 'candidate-b' });
+  await assertSucceeds(updateDoc(aliceUserRef, { publicKeyJwk: candidateKeyA }));
+  await assertFails(updateDoc(aliceUserRef, { publicKeyJwk: candidateKeyB }));
+  await assertFails(updateDoc(aliceUserRef, { publicKeyJwk: deleteField() }));
+  await assertSucceeds(updateDoc(aliceUserRef, { publicKeyJwk: candidateKeyA }));
+  await assertSucceeds(updateDoc(aliceUserRef, { displayName: 'Alice Updated' }));
+  await assertSucceeds(updateDoc(doc(bob, 'users/bob'), { publicKeyJwk: candidateKeyA }));
+  await assertFails(updateDoc(doc(bob, 'users/bob'), { publicKeyJwk: candidateKeyB }));
 
   console.log('Direct chats: only the sender can change message content');
   const messagePayload = {

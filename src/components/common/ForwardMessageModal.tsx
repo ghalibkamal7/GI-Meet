@@ -1,33 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { subscribeToUserChats, sendMessage } from '../../features/chat/chatService';
 import { subscribeToUserGroups, sendGroupMessage } from '../../features/groups/groupService';
 import { ensureDeviceKeys, getSharedKeyForChat, encryptForChat } from '../../features/chat/e2ee';
 import { getMyGroupKey } from '../../features/groups/groupCrypto';
-import { uploadFile, uploadEncryptedFile } from '../../services/storageService';
+import { uploadEncryptedFile } from '../../services/storageService';
 import type { Chat, Message, MessageAttachment } from '../../features/chat/chatTypes';
 import type { Group } from '../../features/groups/groupTypes';
 
 async function reuploadAttachmentForDestination(
   attachment: MessageAttachment,
   pathPrefix: string,
-  destinationKey: CryptoKey | null
+  destinationKey: CryptoKey
 ): Promise<MessageAttachment> {
   const res = await fetch(attachment.url);
   const blob = await res.blob();
   const file = new File([blob], attachment.name, { type: attachment.mimeType });
 
-  if (destinationKey) {
-    const result = await uploadEncryptedFile(file, pathPrefix, destinationKey);
-    return { ...attachment, url: result.url, encrypted: true, iv: result.iv };
-  }
-  const { promise } = uploadFile(file, pathPrefix);
-  const result = await promise;
-  return { ...attachment, url: result.url, encrypted: false, iv: undefined };
+  const result = await uploadEncryptedFile(file, pathPrefix, destinationKey);
+  return { ...attachment, url: result.url, encrypted: true, iv: result.iv };
 }
 
 export function ForwardMessageModal({ message, onClose }: { message: Message; onClose: () => void }) {
   const { profile } = useAuth();
+  const { showToast } = useToast();
   const [chats, setChats] = useState<Chat[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -46,68 +43,77 @@ export function ForwardMessageModal({ message, onClose }: { message: Message; on
   async function handleForwardToChat(chat: Chat) {
     if (!profile) return;
     setSendingTo(chat.id);
-    const myPrivateKey = await ensureDeviceKeys(profile.uid);
-    const otherUid = chat.participants.find((p) => p !== profile.uid);
-    const key = otherUid ? await getSharedKeyForChat(myPrivateKey, otherUid) : null;
+    try {
+      const myPrivateKey = await ensureDeviceKeys(profile.uid);
+      const otherUid = chat.participants.find((p) => p !== profile.uid);
+      if (!otherUid) throw new Error('This chat does not have a valid second participant.');
+      const key = await getSharedKeyForChat(myPrivateKey, otherUid);
+      if (!key) throw new Error('The destination chat encryption key is unavailable. Nothing was forwarded.');
 
-    let text = message.text;
-    let encrypted = false;
-    let iv: string | undefined;
-    if (key && message.text) {
-      const enc = await encryptForChat(key, message.text);
-      text = enc.ciphertext;
-      encrypted = true;
-      iv = enc.iv;
+      let text = message.text;
+      let iv: string | undefined;
+      if (message.text) {
+        const enc = await encryptForChat(key, message.text);
+        text = enc.ciphertext;
+        iv = enc.iv;
+      }
+
+      const attachment = message.attachment
+        ? await reuploadAttachmentForDestination(message.attachment, `chats/${chat.id}`, key)
+        : undefined;
+
+      await sendMessage({
+        chatId: chat.id,
+        senderId: profile.uid,
+        text,
+        encrypted: true,
+        iv,
+        attachment,
+        forwardedFrom: { senderId: message.senderId, senderName: profile.displayName },
+      });
+      setSentTo(chat.id);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not forward the message securely.', 'error');
+    } finally {
+      setSendingTo(null);
     }
-
-    const attachment = message.attachment
-      ? await reuploadAttachmentForDestination(message.attachment, `chats/${chat.id}`, key)
-      : undefined;
-
-    await sendMessage({
-      chatId: chat.id,
-      senderId: profile.uid,
-      text,
-      encrypted,
-      iv,
-      attachment,
-      forwardedFrom: { senderId: message.senderId, senderName: profile.displayName },
-    });
-    setSendingTo(null);
-    setSentTo(chat.id);
   }
 
   async function handleForwardToGroup(group: Group) {
     if (!profile) return;
     setSendingTo(group.id);
-    const myPrivateKey = await ensureDeviceKeys(profile.uid);
-    const key = await getMyGroupKey(group.id, profile.uid, myPrivateKey);
+    try {
+      const myPrivateKey = await ensureDeviceKeys(profile.uid);
+      const key = await getMyGroupKey(group.id, profile.uid, myPrivateKey);
+      if (!key) throw new Error('The destination group encryption key is unavailable. Nothing was forwarded.');
 
-    let text = message.text;
-    let encrypted = false;
-    let iv: string | undefined;
-    if (key && message.text) {
-      const enc = await encryptForChat(key, message.text);
-      text = enc.ciphertext;
-      encrypted = true;
-      iv = enc.iv;
+      let text = message.text;
+      let iv: string | undefined;
+      if (message.text) {
+        const enc = await encryptForChat(key, message.text);
+        text = enc.ciphertext;
+        iv = enc.iv;
+      }
+
+      const attachment = message.attachment
+        ? await reuploadAttachmentForDestination(message.attachment, `groups/${group.id}`, key)
+        : undefined;
+
+      await sendGroupMessage({
+        groupId: group.id,
+        senderId: profile.uid,
+        text,
+        encrypted: true,
+        iv,
+        attachment,
+        forwardedFrom: { senderId: message.senderId, senderName: profile.displayName },
+      });
+      setSentTo(group.id);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not forward the message securely.', 'error');
+    } finally {
+      setSendingTo(null);
     }
-
-    const attachment = message.attachment
-      ? await reuploadAttachmentForDestination(message.attachment, `groups/${group.id}`, key)
-      : undefined;
-
-    await sendGroupMessage({
-      groupId: group.id,
-      senderId: profile.uid,
-      text,
-      encrypted,
-      iv,
-      attachment,
-      forwardedFrom: { senderId: message.senderId, senderName: profile.displayName },
-    });
-    setSendingTo(null);
-    setSentTo(group.id);
   }
 
   return (

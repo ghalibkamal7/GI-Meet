@@ -215,14 +215,19 @@ export async function sendMessage(params: {
   chatId: string;
   senderId: string;
   text: string;
+  encrypted: true;
   replyTo?: Message['replyTo'];
   attachment?: Message['attachment'];
   forwardedFrom?: Message['forwardedFrom'];
-  encrypted?: boolean;
   iv?: string;
 }): Promise<void> {
+  if (params.encrypted !== true) throw new Error('Messages must be encrypted before sending.');
   const trimmed = params.text.trim();
   if (!trimmed && !params.attachment) return;
+  if (trimmed && !params.iv) throw new Error('Encrypted messages require an initialization vector.');
+  if (params.attachment && (!params.attachment.encrypted || !params.attachment.iv)) {
+    throw new Error('Chat attachments must be encrypted before sending.');
+  }
 
   const messageRef = doc(collection(db, 'chats', params.chatId, 'messages'));
   const chatRef = doc(db, 'chats', params.chatId);
@@ -260,21 +265,6 @@ export async function sendMessage(params: {
     hiddenFor: [],
   });
   await batch.commit();
-}
-
-export async function forwardMessage(
-  targetChatId: string,
-  senderId: string,
-  original: Message,
-  senderName: string
-): Promise<void> {
-  await sendMessage({
-    chatId: targetChatId,
-    senderId,
-    text: original.text,
-    attachment: original.attachment ?? undefined,
-    forwardedFrom: { senderId: original.senderId, senderName },
-  });
 }
 
 export async function editMessage(chatId: string, messageId: string, newText: string, encryption?: { encrypted: boolean; iv: string }): Promise<void> {
