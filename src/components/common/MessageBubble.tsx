@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Smile, Reply, Forward, Copy, Star, Pin, Pencil, Trash2, Paperclip, MoreHorizontal } from 'lucide-react';
+import { Smile, Reply, Forward, Copy, Star, Pin, Pencil, Trash2, Paperclip } from 'lucide-react';
 import type { Message } from '../../features/chat/chatTypes';
 import { EmojiPicker } from './EmojiPicker';
 import { useToast } from '../../context/ToastContext';
@@ -66,19 +66,6 @@ export function MessageBubble({
       }}
     >
       <div style={{ maxWidth: '70%', position: 'relative' }}>
-        {!message.deleted && (
-          <button
-            type="button"
-            onClick={() => setShowActions((visible) => !visible)}
-            onFocus={() => setShowActions(true)}
-            style={{ ...actionBtnStyle, position: 'absolute', top: -42, right: isOwn ? 0 : 'auto', left: isOwn ? 'auto' : 0, zIndex: 1 }}
-            aria-label="Message actions"
-            aria-expanded={showActions}
-            aria-controls={`message-actions-${message.id}`}
-          >
-            <MoreHorizontal size={17} strokeWidth={1.75} />
-          </button>
-        )}
         {showActions && !message.deleted && (
           <div
             id={`message-actions-${message.id}`}
