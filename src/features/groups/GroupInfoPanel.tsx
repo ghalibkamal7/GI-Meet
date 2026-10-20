@@ -37,9 +37,13 @@ export function GroupInfoPanel({ group, currentUid, onClose, onLeft }: Props) {
     onLeft();
   }
 
-  function handleCopyInvite() {
-    navigator.clipboard.writeText(`${window.location.origin}/join-group/${group.inviteCode}`);
-    showToast('Invite link copied.', 'success');
+  async function handleCopyInvite() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/join-group/${group.inviteCode}`);
+      showToast('Invite link copied.', 'success');
+    } catch {
+      showToast('Clipboard access failed. Check browser permissions and try again.', 'error');
+    }
   }
 
   return (

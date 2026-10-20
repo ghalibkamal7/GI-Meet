@@ -12,6 +12,7 @@ export function ScheduleMeetingModal({ onClose }: { onClose: () => void }) {
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [password, setPassword] = useState('');
   const [term, setTerm] = useState('');
   const [results, setResults] = useState<UserProfile[]>([]);
   const [invited, setInvited] = useState<Map<string, UserProfile>>(new Map());
@@ -47,16 +48,22 @@ export function ScheduleMeetingModal({ onClose }: { onClose: () => void }) {
       return;
     }
     setSaving(true);
-    await createMeeting({
-      hostUid: profile.uid,
-      title,
-      description,
-      scheduledAt,
-      invitedUids: [profile.uid, ...Array.from(invited.keys())],
-    });
-    setSaving(false);
-    onClose();
-    navigate('/meetings');
+    try {
+      await createMeeting({
+        hostUid: profile.uid,
+        title,
+        description,
+        scheduledAt,
+        password: password || undefined,
+        invitedUids: [profile.uid, ...Array.from(invited.keys())],
+      });
+      onClose();
+      navigate('/meetings');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not schedule this meeting. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -66,6 +73,21 @@ export function ScheduleMeetingModal({ onClose }: { onClose: () => void }) {
 
         <input className="rb-input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ marginBottom: 10 }} />
         <textarea className="rb-input" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ marginBottom: 10 }} />
+        <label htmlFor="meeting-password" style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>Meeting password (optional)</label>
+        <input
+          id="meeting-password"
+          className="rb-input"
+          type="password"
+          placeholder="Guests will need this to join"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          maxLength={256}
+          autoComplete="new-password"
+          style={{ marginBottom: 10 }}
+        />
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -6, marginBottom: 10 }}>
+          Passwords are verified by the server and are not stored in the meeting details.
+        </p>
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
           <input className="rb-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -92,7 +114,7 @@ export function ScheduleMeetingModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        {error && <p className="rb-error-text" style={{ marginBottom: 10 }}>{error}</p>}
+        {error && <p className="rb-error-text" role="alert" style={{ marginBottom: 10 }}>{error}</p>}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button className="rb-btn rb-btn--outline" onClick={onClose}>Cancel</button>

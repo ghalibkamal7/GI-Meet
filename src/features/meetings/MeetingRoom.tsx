@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Room, RoomEvent, type RemoteParticipant } from 'livekit-client';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { connectToRoom, toggleScreenShare } from './livekitClient';
 import { subscribeToMeeting, joinMeeting, leaveMeeting, endMeeting } from './meetingService';
 import type { Meeting } from './meetingTypes';
@@ -44,6 +45,7 @@ export function MeetingRoom() {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { showToast } = useToast();
 
   const joinOptions = (location.state as { cameraOn?: boolean; micOn?: boolean }) ?? {};
   const [room, setRoom] = useState<Room | null>(null);
@@ -59,6 +61,7 @@ export function MeetingRoom() {
   const [liveState, setLiveState] = useState<LiveStreamState | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
+  const [membershipRecorded, setMembershipRecorded] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
   const [floatingReactions, setFloatingReactions] = useState<Array<{ id: number; emoji: string }>>([]);
@@ -71,14 +74,14 @@ export function MeetingRoom() {
   const isHostOrCoHost = isHost || isCoHost;
 
   useEffect(() => {
-    if (!meetingCode) return;
+    if (!meetingCode || !membershipRecorded) return;
     return subscribeToMeeting(meetingCode, setMeeting);
-  }, [meetingCode]);
+  }, [meetingCode, membershipRecorded]);
 
   useEffect(() => {
-    if (!meetingCode) return;
+    if (!meetingCode || !membershipRecorded) return;
     return subscribeToLiveStreamState(meetingCode, setLiveState);
-  }, [meetingCode]);
+  }, [meetingCode, membershipRecorded]);
 
   // If waiting-room admission happens (meeting doc moves us from waiting to
   // active) while we're still stuck on the "waiting for host" screen, retry.
@@ -93,10 +96,15 @@ export function MeetingRoom() {
   useEffect(() => {
     if (!meetingCode || !profile || waiting) return;
     let activeRoom: Room | null = null;
+    let joined = false;
+    let joinedWaitingRoom = false;
 
     async function join() {
       try {
-        const result = await joinMeeting(meetingCode!, profile!.uid);
+        const result = await joinMeeting(meetingCode!);
+        joined = true;
+        joinedWaitingRoom = result.waiting;
+        setMembershipRecorded(true);
         if (result.waiting) {
           setWaiting(true);
           return;
@@ -142,12 +150,16 @@ export function MeetingRoom() {
           }
         });
       } catch (err) {
-        if (err instanceof Error && err.message === 'meeting-locked') {
+        if (err instanceof Error && err.message.includes('locked')) {
           setConnectError('This meeting is locked by the host.');
-        } else if (err instanceof Error && err.message === 'meeting-not-found') {
+        } else if (err instanceof Error && err.message.includes('does not exist')) {
           setConnectError("This meeting doesn't exist.");
+        } else if (err instanceof Error && err.message.includes('password')) {
+          setConnectError('Enter the meeting password in the lobby before joining.');
         } else {
-          setConnectError('Could not connect to the meeting. Check your network and try again.');
+          setConnectError(err instanceof Error && err.message
+            ? err.message
+            : 'Could not connect to the meeting. Check your network and try again.');
         }
       }
     }
@@ -156,7 +168,9 @@ export function MeetingRoom() {
 
     return () => {
       activeRoom?.disconnect();
-      if (meetingCode && profile) leaveMeeting(meetingCode, profile.uid);
+      if (joined && !joinedWaitingRoom && meetingCode && profile) {
+        void leaveMeeting(meetingCode, profile.uid);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingCode, profile, waiting]);
@@ -214,8 +228,14 @@ export function MeetingRoom() {
     navigate('/meetings');
   }
 
-  function handleCopyCode() {
-    navigator.clipboard.writeText(meetingCode ?? '');
+  async function handleCopyCode() {
+    if (!meetingCode) return;
+    try {
+      await navigator.clipboard.writeText(meetingCode);
+      showToast('Meeting code copied.', 'success');
+    } catch {
+      showToast('Clipboard access failed. Check browser permissions and try again.', 'error');
+    }
   }
 
   if (waiting) {
@@ -228,10 +248,16 @@ export function MeetingRoom() {
   }
 
   if (connectError) {
+    const passwordRequired = connectError.toLowerCase().includes('password');
     return (
       <div style={{ padding: 24, textAlign: 'center' }}>
         <p className="rb-error-text">{connectError}</p>
-        <button className="rb-btn rb-btn--outline" onClick={() => navigate('/meetings')}>Back to meetings</button>
+        <button
+          className="rb-btn rb-btn--outline"
+          onClick={() => navigate(passwordRequired ? `/meeting/${meetingCode}/lobby` : '/meetings')}
+        >
+          {passwordRequired ? 'Back to meeting lobby' : 'Back to meetings'}
+        </button>
       </div>
     );
   }

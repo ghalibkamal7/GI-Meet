@@ -29,7 +29,7 @@ import type { Message } from '../chat/chatTypes';
 import { MessageBubble } from '../../components/common/MessageBubble';
 import { MessageComposer } from '../../components/common/MessageComposer';
 import { ForwardMessageModal } from '../../components/common/ForwardMessageModal';
-import { uploadEncryptedFile } from '../../services/storageService';
+import { downloadStorageBlob, uploadEncryptedFile } from '../../services/storageService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { GroupInfoPanel } from './GroupInfoPanel';
 import { createMeeting } from '../meetings/meetingService';
@@ -146,13 +146,19 @@ export function GroupChat() {
             }
           }
 
-          if (attachment?.encrypted && attachment.iv && groupKey) {
+          if (attachment?.url) {
             try {
-              const objectUrl = await decryptAttachmentUrl(groupKey, attachment.url, attachment.iv, attachment.mimeType);
+              if (attachment.encrypted && (!attachment.iv || !groupKey)) {
+                throw new Error('The encryption key for this attachment is unavailable.');
+              }
+              const objectUrl = attachment.encrypted && attachment.iv && groupKey
+                ? await decryptAttachmentUrl(groupKey, attachment.url, attachment.iv, attachment.mimeType)
+                : URL.createObjectURL(await downloadStorageBlob(attachment.url));
               createdUrls.push(objectUrl);
               attachment = { ...attachment, url: objectUrl };
-            } catch {
-              // Leave the original (undecryptable) URL rather than crash.
+            } catch (error) {
+              console.error('Unable to load the group attachment through authorized storage.', error);
+              attachment = null;
             }
           }
 
@@ -235,8 +241,7 @@ export function GroupChat() {
     setUploading(true);
     try {
       const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-      let result;
-      result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
+      const result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
       const encrypted = true;
       const iv = result.iv;
 
@@ -262,8 +267,7 @@ export function GroupChat() {
     setUploading(true);
     try {
       const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
-      let result;
-      result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
+      const result = await uploadEncryptedFile(file, `groups/${groupId}`, groupKey);
       const encrypted = true;
       const iv = result.iv;
 

@@ -95,7 +95,7 @@ async function cacheAsset(cache, url) {
   try {
     const response = await fetch(url);
     if (isCacheableAsset(response)) await cache.put(url, response);
-  } catch (error) {
+  } catch {
     // Offline or blocked right now — runtime caching picks the file up later.
   }
 }
@@ -118,7 +118,7 @@ async function precacheShell() {
       try {
         const response = await fetch(url);
         if (isCacheableAsset(response)) await shellCache.put(url, response);
-      } catch (error) {
+      } catch {
         // ignore
       }
     })
@@ -178,7 +178,7 @@ async function networkFirstShell(request) {
       await cache.put(SHELL_URL, response.clone());
     }
     return response;
-  } catch (error) {
+  } catch {
     const cache = await caches.open(SHELL_CACHE);
     const cached = await cache.match(SHELL_URL);
     return cached || Response.error();

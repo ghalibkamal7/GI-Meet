@@ -63,16 +63,20 @@ export function LoginPage() {
         </p>
 
         <form onSubmit={handleEmailLogin} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label style={fieldLabel} htmlFor="login-email">Email</label>
           <input
+            id="login-email"
             className="rb-input"
             type="email"
-            placeholder="Email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
           />
+          <label style={fieldLabel} htmlFor="login-password">Password</label>
           <input
+            id="login-password"
             className="rb-input"
             type="password"
             placeholder="Password"
@@ -81,7 +85,7 @@ export function LoginPage() {
             required
             autoComplete="current-password"
           />
-          {error && <p className="rb-error-text">{error}</p>}
+          {error && <p className="rb-error-text" role="alert">{error}</p>}
           <button className="rb-btn rb-btn--primary" type="submit" disabled={submitting}>
             {submitting ? 'Logging in…' : 'Log in'}
           </button>
@@ -95,11 +99,13 @@ export function LoginPage() {
 
         <button
           className="rb-btn rb-btn--outline"
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={handleGoogleLogin}
           disabled={submitting}
         >
-          <GoogleLogo size={17} /> Continue with Google
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, maxWidth: '100%' }}>
+            <GoogleLogo size={17} /> Continue with Google
+          </span>
         </button>
 
         <p style={{ marginTop: 24, fontSize: 14, textAlign: 'center', color: 'var(--color-text-muted)' }}>
@@ -115,3 +121,10 @@ export function LoginPage() {
     </div>
   );
 }
+
+const fieldLabel: React.CSSProperties = {
+  marginBottom: -8,
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--color-text-muted)',
+};

@@ -34,7 +34,7 @@ import { MessageBubble } from '../../components/common/MessageBubble';
 import { MessageComposer } from '../../components/common/MessageComposer';
 import { ForwardMessageModal } from '../../components/common/ForwardMessageModal';
 import { ChatOptionsMenu } from '../../components/common/ChatOptionsMenu';
-import { uploadEncryptedFile } from '../../services/storageService';
+import { downloadStorageBlob, uploadEncryptedFile } from '../../services/storageService';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { usePresence } from '../../hooks/usePresence';
 import { Search, BarChart3, Phone, Video, MoreVertical, Pin, Lock, ArrowLeft } from 'lucide-react';
@@ -231,13 +231,19 @@ export function ChatWindow() {
             }
           }
 
-          if (attachment?.encrypted && attachment.iv && sharedKey) {
+          if (attachment?.url) {
             try {
-              const objectUrl = await decryptAttachmentUrl(sharedKey, attachment.url, attachment.iv, attachment.mimeType);
+              if (attachment.encrypted && (!attachment.iv || !sharedKey)) {
+                throw new Error('The encryption key for this attachment is unavailable.');
+              }
+              const objectUrl = attachment.encrypted && attachment.iv && sharedKey
+                ? await decryptAttachmentUrl(sharedKey, attachment.url, attachment.iv, attachment.mimeType)
+                : URL.createObjectURL(await downloadStorageBlob(attachment.url));
               createdUrls.push(objectUrl);
               attachment = { ...attachment, url: objectUrl };
-            } catch {
-              // Leave the (undecryptable) original URL — it just won't render correctly, not a crash.
+            } catch (error) {
+              console.error('Unable to load the chat attachment through authorized storage.', error);
+              attachment = null;
             }
           }
 
@@ -360,9 +366,8 @@ export function ChatWindow() {
   async function handleSend(text: string) {
     if (encryptionError) throw new Error(encryptionError);
     if (!sharedKey) throw new Error('Chat encryption is not ready. Sending is disabled until the encryption key is available.');
-    let payloadText: string;
     const enc = await encryptForChat(sharedKey, text);
-    payloadText = enc.ciphertext;
+    const payloadText = enc.ciphertext;
     const encrypted = true;
     const iv = enc.iv;
 
@@ -399,8 +404,7 @@ export function ChatWindow() {
     setUploading(true);
     try {
       const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'file';
-      let result;
-      result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
+      const result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
       const encrypted = true;
       const iv = result.iv;
 
@@ -426,8 +430,7 @@ export function ChatWindow() {
     setUploading(true);
     try {
       const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
-      let result;
-      result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
+      const result = await uploadEncryptedFile(file, `chats/${chatId}`, sharedKey);
       const encrypted = true;
       const iv = result.iv;
 

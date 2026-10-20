@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Film, FileText } from 'lucide-react';
 import { db } from '../../firebase/firebaseConfig';
 import type { MessageAttachment } from '../chat/chatTypes';
+import { useAuth } from '../../context/AuthContext';
+import { decryptAttachmentUrl, ensureDeviceKeys, getSharedKeyForChat } from '../chat/e2ee';
+import { getMyGroupKey } from '../groups/groupCrypto';
+import { downloadStorageBlob } from '../../services/storageService';
 
 type Tab = 'photos' | 'videos' | 'documents' | 'links';
 
@@ -18,29 +22,87 @@ const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
 export function FileHubPage() {
   const { scope, id } = useParams<{ scope: 'chats' | 'groups'; id: string }>();
+  const { profile } = useAuth();
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [links, setLinks] = useState<Array<{ id: string; url: string; text: string; createdAt: number }>>([]);
   const [tab, setTab] = useState<Tab>('photos');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    if (!scope || !id) return;
+    if (!scope || !id || !profile) {
+      setEntries([]);
+      setLinks([]);
+      return;
+    }
     const q = query(collection(db, scope, id, 'messages'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      const files: FileEntry[] = [];
-      const linkEntries: typeof links = [];
-      snap.docs.forEach((d) => {
-        const data = d.data();
-        if (data.attachment) {
-          files.push({ id: d.id, attachment: data.attachment, createdAt: data.createdAt?.toMillis?.() ?? 0, text: data.text ?? '' });
+    let generation = 0;
+    let activeUrls: string[] = [];
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const currentGeneration = ++generation;
+      void (async () => {
+        const myPrivateKey = await ensureDeviceKeys(profile.uid);
+        let attachmentKey: CryptoKey | null = null;
+        if (scope === 'chats') {
+          const chatSnapshot = await getDoc(doc(db, 'chats', id));
+          const otherUid = chatSnapshot.data()?.participants?.find((uid: string) => uid !== profile.uid);
+          if (!otherUid) throw new Error('This chat does not have a valid second participant.');
+          attachmentKey = await getSharedKeyForChat(myPrivateKey, otherUid);
+        } else {
+          attachmentKey = await getMyGroupKey(id, profile.uid, myPrivateKey);
         }
-        const foundLinks = (data.text ?? '').match(URL_REGEX);
-        foundLinks?.forEach((url: string) => linkEntries.push({ id: `${d.id}-${url}`, url, text: data.text, createdAt: data.createdAt?.toMillis?.() ?? 0 }));
+
+        const files: FileEntry[] = [];
+        const linkEntries: typeof links = [];
+        const createdUrls: string[] = [];
+        for (const messageDoc of snap.docs) {
+          const data = messageDoc.data();
+          if (data.attachment) {
+            const attachment = data.attachment as MessageAttachment;
+            try {
+              if (attachment.encrypted && (!attachment.iv || !attachmentKey)) {
+                throw new Error('The encryption key for this attachment is unavailable.');
+              }
+              const objectUrl = attachment.encrypted && attachment.iv && attachmentKey
+                ? await decryptAttachmentUrl(attachmentKey, attachment.url, attachment.iv, attachment.mimeType)
+                : URL.createObjectURL(await downloadStorageBlob(attachment.url));
+              createdUrls.push(objectUrl);
+              files.push({
+                id: messageDoc.id,
+                attachment: { ...attachment, url: objectUrl },
+                createdAt: data.createdAt?.toMillis?.() ?? 0,
+                text: data.text ?? '',
+              });
+            } catch (error) {
+              console.error('Unable to load a shared file through authorized storage.', error);
+            }
+          }
+          const foundLinks = (data.text ?? '').match(URL_REGEX);
+          foundLinks?.forEach((url: string) => linkEntries.push({
+            id: `${messageDoc.id}-${url}`,
+            url,
+            text: data.text,
+            createdAt: data.createdAt?.toMillis?.() ?? 0,
+          }));
+        }
+        if (currentGeneration !== generation) {
+          createdUrls.forEach(URL.revokeObjectURL);
+          return;
+        }
+        activeUrls.forEach(URL.revokeObjectURL);
+        activeUrls = createdUrls;
+        setEntries(files);
+        setLinks(linkEntries);
+      })().catch((error: unknown) => {
+        console.error('Unable to load files for this conversation.', error);
+        setEntries([]);
       });
-      setEntries(files);
-      setLinks(linkEntries);
     });
-  }, [scope, id]);
+    return () => {
+      generation += 1;
+      unsubscribe();
+      activeUrls.forEach(URL.revokeObjectURL);
+    };
+  }, [scope, id, profile]);
 
   const filteredFiles = entries.filter((e) => {
     const matchesTab =

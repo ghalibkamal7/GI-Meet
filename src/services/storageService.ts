@@ -1,10 +1,17 @@
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL, getBlob } from 'firebase/storage';
 import { storage } from '../firebase/firebaseConfig';
 import { appConfig } from '../config/appConfig';
 import { encryptBytes, fromBase64 } from './cryptoService';
 
 export interface UploadResult {
   url: string;
+  name: string;
+  sizeBytes: number;
+  mimeType: string;
+}
+
+export interface PrivateUploadResult {
+  path: string;
   name: string;
   sizeBytes: number;
   mimeType: string;
@@ -50,6 +57,37 @@ export function uploadFile(
   return { promise, cancel: () => task.cancel() };
 }
 
+export function uploadPrivateFile(
+  file: File,
+  pathPrefix: string,
+  onProgress?: (percent: number) => void
+): Promise<PrivateUploadResult> {
+  const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+  const storageRef = ref(storage, `${pathPrefix}/${safeName}`);
+  const task = uploadBytesResumable(storageRef, file, { contentType: file.type });
+
+  return new Promise((resolve, reject) => {
+    task.on(
+      'state_changed',
+      (snapshot) => {
+        const percent = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        onProgress?.(percent);
+      },
+      reject,
+      () => resolve({
+        path: storageRef.fullPath,
+        name: file.name,
+        sizeBytes: file.size,
+        mimeType: file.type,
+      })
+    );
+  });
+}
+
+export async function downloadStorageBlob(pathOrUrl: string): Promise<Blob> {
+  return getBlob(ref(storage, pathOrUrl));
+}
+
 /**
  * Encrypts the file's bytes client-side (AES-GCM, the same key as the
  * chat/group's text messages) before upload — Firebase Storage only ever
@@ -66,7 +104,6 @@ export async function uploadEncryptedFile(
   const { ciphertext, iv } = await encryptBytes(key, fileBuffer);
   const encryptedFile = new File([fromBase64(ciphertext)], file.name, { type: 'application/octet-stream' });
 
-  const { promise } = uploadFile(encryptedFile, pathPrefix, onProgress);
-  const result = await promise;
-  return { ...result, name: file.name, mimeType: file.type, iv };
+  const result = await uploadPrivateFile(encryptedFile, pathPrefix, onProgress);
+  return { ...result, url: result.path, name: file.name, mimeType: file.type, iv };
 }

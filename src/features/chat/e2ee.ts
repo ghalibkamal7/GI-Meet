@@ -10,6 +10,7 @@ import {
   toBase64,
   type EncryptedPayload,
 } from '../../services/cryptoService';
+import { downloadStorageBlob } from '../../services/storageService';
 import { getPrivateKey, savePrivateKeyIfAbsent } from '../../services/secureKeyStore';
 import { registerUserPublicKeyIfAbsent } from '../../services/userService';
 import { decideDeviceKeyAction, publicKeysMatch } from './deviceKeyPolicy';
@@ -142,8 +143,7 @@ export async function decryptForChat(key: CryptoKey | null, payload: EncryptedPa
 }
 
 export async function decryptAttachmentUrl(key: CryptoKey, url: string, iv: string, mimeType: string): Promise<string> {
-  const res = await fetch(url);
-  const encryptedBuffer = await res.arrayBuffer();
+  const encryptedBuffer = await (await downloadStorageBlob(url)).arrayBuffer();
   const decryptedBuffer = await decryptBytes(key, { ciphertext: toBase64(encryptedBuffer), iv });
   const blob = new Blob([decryptedBuffer], { type: mimeType });
   return URL.createObjectURL(blob);

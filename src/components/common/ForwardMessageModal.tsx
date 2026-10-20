@@ -5,7 +5,7 @@ import { subscribeToUserChats, sendMessage } from '../../features/chat/chatServi
 import { subscribeToUserGroups, sendGroupMessage } from '../../features/groups/groupService';
 import { ensureDeviceKeys, getSharedKeyForChat, encryptForChat } from '../../features/chat/e2ee';
 import { getMyGroupKey } from '../../features/groups/groupCrypto';
-import { uploadEncryptedFile } from '../../services/storageService';
+import { downloadStorageBlob, uploadEncryptedFile } from '../../services/storageService';
 import type { Chat, Message, MessageAttachment } from '../../features/chat/chatTypes';
 import type { Group } from '../../features/groups/groupTypes';
 
@@ -14,8 +14,9 @@ async function reuploadAttachmentForDestination(
   pathPrefix: string,
   destinationKey: CryptoKey
 ): Promise<MessageAttachment> {
-  const res = await fetch(attachment.url);
-  const blob = await res.blob();
+  const blob = attachment.url.startsWith('blob:')
+    ? await (await fetch(attachment.url)).blob()
+    : await downloadStorageBlob(attachment.url);
   const file = new File([blob], attachment.name, { type: attachment.mimeType });
 
   const result = await uploadEncryptedFile(file, pathPrefix, destinationKey);

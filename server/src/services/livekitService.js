@@ -20,6 +20,7 @@ export async function createParticipantToken(roomName, participantIdentity, part
   const token = new AccessToken(apiKey, apiSecret, {
     identity: participantIdentity,
     name: participantName,
+    ttl: '2m',
   });
   token.addGrant({
     roomJoin: true,

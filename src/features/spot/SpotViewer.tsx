@@ -5,6 +5,7 @@ import { markSpotViewed, reactToSpot, deleteSpot } from './spotService';
 import { getOrCreateDirectChat, sendMessage } from '../chat/chatService';
 import { ensureDeviceKeys, getSharedKeyForChat, encryptForChat } from '../chat/e2ee';
 import { useToast } from '../../context/ToastContext';
+import { downloadStorageBlob } from '../../services/storageService';
 import type { Spot } from './spotTypes';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 
@@ -18,8 +19,30 @@ export function SpotViewer({ spots, startIndex, onClose }: { spots: Spot[]; star
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [mediaObjectUrl, setMediaObjectUrl] = useState<string | null>(null);
 
   const spot = spots[index];
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setMediaObjectUrl(null);
+    if (!spot?.mediaUrl) return;
+
+    downloadStorageBlob(spot.mediaUrl).then((blob) => {
+      if (cancelled) return;
+      objectUrl = URL.createObjectURL(blob);
+      setMediaObjectUrl(objectUrl);
+    }).catch((error: unknown) => {
+      console.error('Unable to load Spot media through authorized storage.', error);
+      showToast('Could not load this Spot media. Check your connection and access.', 'error');
+    });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [spot?.id, spot?.mediaUrl, showToast]);
 
   useEffect(() => {
     if (!spot || !profile) return;
@@ -99,8 +122,8 @@ export function SpotViewer({ spots, startIndex, onClose }: { spots: Spot[]; star
         <div onClick={handlePrev} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '30%', cursor: 'pointer' }} />
         <div onClick={handleNext} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '30%', cursor: 'pointer' }} />
 
-        {spot.mediaType === 'image' && <img src={spot.mediaUrl!} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />}
-        {spot.mediaType === 'video' && <video src={spot.mediaUrl!} autoPlay style={{ maxWidth: '100%', maxHeight: '100%' }} />}
+        {spot.mediaType === 'image' && mediaObjectUrl && <img src={mediaObjectUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />}
+        {spot.mediaType === 'video' && mediaObjectUrl && <video src={mediaObjectUrl} autoPlay style={{ maxWidth: '100%', maxHeight: '100%' }} />}
         {spot.mediaType === 'none' && (
           <div style={{ padding: 32, textAlign: 'center' }}>
             {spot.emoji && <div style={{ fontSize: 48, marginBottom: 12 }}>{spot.emoji}</div>}

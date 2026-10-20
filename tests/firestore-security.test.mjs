@@ -33,6 +33,8 @@ const alice = env.authenticatedContext('alice').firestore();
 const bob = env.authenticatedContext('bob').firestore();
 const carol = env.authenticatedContext('carol').firestore();
 const outsider = env.authenticatedContext('mallory').firestore();
+const unauthenticated = env.unauthenticatedContext().firestore();
+const seededSpotExpiresAt = new Date(Date.now() + 60_000);
 
 async function seedFixtures() {
   await env.withSecurityRulesDisabled(async (context) => {
@@ -143,6 +145,41 @@ async function seedFixtures() {
       startedAt: null,
       endedAt: null,
     });
+    await setDoc(doc(db, 'meetings', 'password-protected-room'), {
+      hostUid: 'alice',
+      coHosts: [],
+      locked: false,
+      hasPassword: true,
+      waitingRoomEnabled: false,
+      activeParticipants: ['alice'],
+      waitingParticipants: [],
+      allParticipants: ['alice'],
+      invitedUids: ['bob'],
+      startedAt: null,
+      endedAt: null,
+    });
+    await setDoc(doc(db, 'meetings', 'legacy-password-room'), {
+      hostUid: 'alice',
+      coHosts: [],
+      locked: false,
+      passwordHash: 'a'.repeat(64),
+      waitingRoomEnabled: false,
+      activeParticipants: ['alice'],
+      waitingParticipants: [],
+      allParticipants: ['alice'],
+      startedAt: null,
+      endedAt: null,
+    });
+    await setDoc(doc(db, 'meetings', 'password-protected-room', 'passwordAuthorizations', 'bob'), {
+      expiresAt: seededSpotExpiresAt,
+    });
+    await setDoc(doc(db, 'meetings', 'password-protected-room', 'passwordAuthorizations', 'carol'), {
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    await setDoc(doc(db, 'meetings', 'password-protected-room', 'chat', 'message'), {
+      senderId: 'alice',
+      text: 'Protected meeting message',
+    });
     await setDoc(doc(db, 'meetings', 'attendee-leave-active'), {
       hostUid: 'alice',
       coHosts: ['carol'],
@@ -171,6 +208,10 @@ async function seedFixtures() {
       upvotes: [],
       answered: false,
     });
+    await setDoc(doc(db, 'meetings', 'waiting-room', 'chat', 'message'), {
+      senderId: 'alice',
+      text: 'Waiting-room chat',
+    });
     await setDoc(doc(db, 'meetings', 'active-room', 'polls', 'meeting-poll'), {
       question: 'Meeting poll',
       options: ['Yes', 'No'],
@@ -195,6 +236,31 @@ async function seedFixtures() {
       members: ['alice'],
       memberInfo: {},
       groupIds: [],
+    });
+    await setDoc(doc(db, 'spots', 'alice-spot'), {
+      uid: 'alice',
+      authorName: 'Alice',
+      text: 'A private test spot',
+      mediaUrl: null,
+      expiresAt: seededSpotExpiresAt,
+      viewedBy: [],
+      reactions: {},
+      audienceUids: ['bob', 'carol'],
+    });
+    await setDoc(doc(db, 'spotFeeds', 'bob', 'items', 'alice-spot'), {
+      ownerUid: 'alice',
+      chatId: 'alice_bob',
+      expiresAt: seededSpotExpiresAt,
+    });
+    await setDoc(doc(db, 'spots', 'alice-spot', 'audience', 'bob'), {
+      ownerUid: 'alice',
+      chatId: 'alice_bob',
+      expiresAt: seededSpotExpiresAt,
+    });
+    await setDoc(doc(db, 'spotFeeds', 'carol', 'items', 'alice-spot'), {
+      ownerUid: 'alice',
+      groupId: 'team',
+      expiresAt: new Date(Date.now() + 60_000),
     });
   });
 }
@@ -414,12 +480,24 @@ try {
   await assertFails(updateDoc(doc(bob, 'groups/team'), { name: 'Unauthorized rename' }));
 
   console.log('Meetings: participants can join/leave; host controls remain privileged');
+  console.log('Meeting reads: only participants and invitees can read meeting records, and legacy hashes stay server-only');
+  await assertSucceeds(getDoc(doc(alice, 'meetings/active-room')));
+  await assertFails(getDoc(doc(outsider, 'meetings/active-room')));
+  await assertSucceeds(getDoc(doc(bob, 'meetings/password-protected-room')));
+  await assertFails(getDoc(doc(outsider, 'meetings/password-protected-room')));
+  await assertFails(getDoc(doc(alice, 'meetings/legacy-password-room')));
+  await assertFails(getDoc(doc(bob, 'meetings/password-protected-room/chat/message')));
+  await assertFails(getDoc(doc(outsider, 'meetings/active-room/qna/question')));
+  await assertFails(getDoc(doc(outsider, 'meetings/active-room/polls/meeting-poll')));
+  await assertSucceeds(getDoc(doc(alice, 'meetings/password-protected-room/chat/message')));
   console.log('Allow attendee self-join');
   await assertSucceeds(updateDoc(doc(bob, 'meetings/active-room'), {
     activeParticipants: arrayUnion('bob'),
     allParticipants: arrayUnion('bob'),
     startedAt: new Date(),
   }));
+  await assertSucceeds(getDoc(doc(bob, 'meetings/active-room')));
+  await assertSucceeds(getDoc(doc(bob, 'meetings/active-room/qna/question')));
   console.log('Deny attendee adding another participant');
   await assertFails(updateDoc(doc(carol, 'meetings/active-room'), {
     activeParticipants: arrayUnion('mallory'),
@@ -437,9 +515,46 @@ try {
     waitingParticipants: arrayUnion('bob'),
     allParticipants: arrayUnion('bob'),
   }));
+  await assertFails(getDoc(doc(bob, 'meetings/waiting-room/chat/message')));
+  await assertSucceeds(updateDoc(doc(alice, 'meetings/waiting-room'), {
+    waitingParticipants: arrayRemove('bob'),
+    activeParticipants: arrayUnion('bob'),
+  }));
+  await assertSucceeds(getDoc(doc(bob, 'meetings/waiting-room/chat/message')));
+  await assertSucceeds(updateDoc(doc(bob, 'meetings/waiting-room'), {
+    activeParticipants: arrayRemove('bob'),
+  }));
+  await assertFails(getDoc(doc(bob, 'meetings/waiting-room/chat/message')));
   await assertFails(updateDoc(doc(bob, 'meetings/waiting-room'), {
     waitingParticipants: arrayUnion('mallory'),
     allParticipants: arrayUnion('mallory'),
+  }));
+  console.log('Password-protected meetings require a live, server-issued authorization before joining');
+  await assertFails(updateDoc(doc(bob, 'meetings/password-protected-room'), {
+    activeParticipants: arrayUnion('bob'),
+    allParticipants: arrayUnion('bob'),
+    startedAt: new Date(),
+  }));
+  await assertFails(updateDoc(doc(bob, 'meetings/legacy-password-room'), {
+    activeParticipants: arrayUnion('bob'),
+    allParticipants: arrayUnion('bob'),
+    startedAt: new Date(),
+  }));
+  await assertFails(setDoc(doc(bob, 'meetings/password-protected-room/passwordAuthorizations', 'mallory'), {
+    expiresAt: new Date(Date.now() + 60_000),
+  }));
+  await assertFails(updateDoc(doc(carol, 'meetings/password-protected-room'), {
+    activeParticipants: arrayUnion('carol'),
+    allParticipants: arrayUnion('carol'),
+    startedAt: new Date(),
+  }));
+  await assertFails(updateDoc(doc(bob, 'meetings/password-protected-room'), {
+    activeParticipants: arrayUnion('bob'),
+    allParticipants: arrayUnion('bob'),
+    startedAt: new Date(),
+  }));
+  await assertSucceeds(updateDoc(doc(alice, 'meetings/password-protected-room'), {
+    startedAt: new Date(),
   }));
   console.log('Attendee leave is limited to the authenticated UID in each participant array');
   await assertFails(updateDoc(doc(bob, 'meetings/attendee-leave-active'), {
@@ -471,6 +586,7 @@ try {
     activeParticipants: arrayRemove('bob'),
     waitingParticipants: arrayRemove('bob'),
   }));
+  await assertFails(getDoc(doc(bob, 'meetings/active-room/qna/question')));
 
   console.log('Meeting Q&A and polls: self-updates are isolated; host moderation is allowed');
   await assertSucceeds(updateDoc(doc(alice, 'meetings/active-room/qna/question'), {
@@ -522,6 +638,95 @@ try {
     where('isPublic', '==', true),
   )));
   if (publicList.size !== 2) throw new Error(`Expected two discoverable public communities, got ${publicList.size}.`);
+
+  console.log('Spots: only authors and validated per-viewer feeds can read; feed relationships cannot be forged');
+  console.log('Spot read as author');
+  await assertSucceeds(getDoc(doc(alice, 'spots/alice-spot')));
+  console.log('Spot read as active direct-chat contact');
+  await assertSucceeds(getDoc(doc(bob, 'spots/alice-spot')));
+  console.log('Spot read after shared-group membership removal is denied');
+  await assertFails(getDoc(doc(carol, 'spots/alice-spot')));
+  await assertFails(getDoc(doc(outsider, 'spots/alice-spot')));
+  await assertFails(getDoc(doc(unauthenticated, 'spots/alice-spot')));
+  await assertFails(getDocs(query(collection(bob, 'spots'), where('uid', '==', 'alice'))));
+  await assertSucceeds(getDoc(doc(bob, 'spotFeeds/bob/items/alice-spot')));
+  await assertFails(getDoc(doc(outsider, 'spotFeeds/bob/items/alice-spot')));
+  await assertSucceeds(getDoc(doc(alice, 'spots/alice-spot/audience/bob')));
+  await assertFails(getDoc(doc(bob, 'spots/alice-spot/audience/bob')));
+  const newSpot = doc(alice, 'spots/alice-new-spot');
+  const newFeed = doc(alice, 'spotFeeds/bob/items/alice-new-spot');
+  const newAudienceEntry = doc(alice, 'spots/alice-new-spot/audience/bob');
+  const newSpotExpiresAt = new Date(Date.now() + 60_000);
+  const feedBatch = writeBatch(alice);
+  feedBatch.set(newSpot, {
+    uid: 'alice',
+    authorName: 'Alice',
+    mediaUrl: null,
+    text: 'New spot',
+    expiresAt: newSpotExpiresAt,
+    viewedBy: [],
+    reactions: {},
+  });
+  feedBatch.set(newFeed, {
+    ownerUid: 'alice',
+    chatId: 'alice_bob',
+    expiresAt: newSpotExpiresAt,
+  });
+  feedBatch.set(newAudienceEntry, {
+    ownerUid: 'alice',
+    chatId: 'alice_bob',
+    expiresAt: newSpotExpiresAt,
+  });
+  await assertSucceeds(feedBatch.commit());
+  await assertSucceeds(getDoc(doc(bob, 'spots/alice-new-spot')));
+  await assertSucceeds(getDoc(newAudienceEntry));
+  await assertFails(getDoc(doc(bob, 'spots/alice-new-spot/audience/bob')));
+  const deleteSpotBatch = writeBatch(alice);
+  deleteSpotBatch.delete(newFeed);
+  deleteSpotBatch.delete(newAudienceEntry);
+  deleteSpotBatch.delete(newSpot);
+  await assertSucceeds(deleteSpotBatch.commit());
+  await assertFails(getDoc(doc(bob, 'spots/alice-new-spot')));
+  await assertFails(setDoc(doc(bob, 'spotFeeds/mallory/items/alice-spot'), {
+    ownerUid: 'bob',
+    groupId: 'missing-group',
+    expiresAt: new Date(Date.now() + 60_000),
+  }));
+  await assertFails(setDoc(doc(bob, 'spotFeeds/mallory/items/alice-spot'), {
+    ownerUid: 'alice',
+    chatId: 'alice_bob',
+    expiresAt: seededSpotExpiresAt,
+  }));
+  await assertFails(setDoc(doc(alice, 'spotFeeds/mallory/items/alice-spot'), {
+    ownerUid: 'alice',
+    groupId: 'missing-group',
+    expiresAt: seededSpotExpiresAt,
+  }));
+  await assertFails(setDoc(doc(alice, 'spots/alice-spot/audience/mallory'), {
+    ownerUid: 'alice',
+    groupId: 'missing-group',
+    expiresAt: seededSpotExpiresAt,
+  }));
+
+  console.log('Spots: viewers can add their own view/reaction metadata but cannot alter content or other users');
+  await assertSucceeds(updateDoc(doc(bob, 'spots/alice-spot'), {
+    viewedBy: arrayUnion('bob'),
+  }));
+  await assertSucceeds(updateDoc(doc(bob, 'spots/alice-spot'), {
+    'reactions.bob': '🔥',
+  }));
+  await assertFails(updateDoc(doc(bob, 'spots/alice-spot'), {
+    text: 'Changed by Bob',
+  }));
+  await assertFails(updateDoc(doc(bob, 'spots/alice-spot'), {
+    uid: 'bob',
+  }));
+  await assertFails(updateDoc(doc(bob, 'spots/alice-spot'), {
+    viewedBy: arrayUnion('mallory'),
+  }));
+  await assertFails(updateDoc(doc(bob, 'spots/alice-spot'), {
+    'reactions.alice': '🔥',
+  }));
 
   console.log('ALL FIRESTORE SECURITY TESTS PASSED');
 } finally {

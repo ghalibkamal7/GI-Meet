@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Circle, RefreshCw, AlertTriangle, Copy } from 'lucide-react';
 import { stopYouTubeLive, type LiveStreamState } from './youtubeLiveService';
+import { useToast } from '../../context/ToastContext';
 
 export function LiveControls({ meetingCode, state }: { meetingCode: string; state: LiveStreamState }) {
+  const { showToast } = useToast();
   const [elapsed, setElapsed] = useState('00:00:00');
   const [stopping, setStopping] = useState(false);
 
@@ -20,7 +22,23 @@ export function LiveControls({ meetingCode, state }: { meetingCode: string; stat
 
   async function handleStop() {
     setStopping(true);
-    await stopYouTubeLive(meetingCode).finally(() => setStopping(false));
+    try {
+      await stopYouTubeLive(meetingCode);
+    } catch {
+      showToast('Could not stop the YouTube stream. Check your connection and retry.', 'error');
+    } finally {
+      setStopping(false);
+    }
+  }
+
+  async function handleCopyWatchUrl() {
+    if (!state.watchUrl) return;
+    try {
+      await navigator.clipboard.writeText(state.watchUrl);
+      showToast('YouTube watch link copied.', 'success');
+    } catch {
+      showToast('Clipboard access failed. Check browser permissions and try again.', 'error');
+    }
   }
 
   const statusMeta: Record<string, { label: string; icon: React.ReactNode }> = {
@@ -66,7 +84,7 @@ export function LiveControls({ meetingCode, state }: { meetingCode: string; stat
             <button
               className="rb-btn rb-btn--outline"
               style={{ padding: '6px 12px', background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: 6 }}
-              onClick={() => navigator.clipboard.writeText(state.watchUrl!)}
+              onClick={handleCopyWatchUrl}
             >
               <Copy size={13} strokeWidth={1.75} /> Copy watch link
             </button>

@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   setDoc,
-  getDoc,
   updateDoc,
   onSnapshot,
   serverTimestamp,
@@ -17,6 +16,7 @@ import {
 import { db } from '../../firebase/firebaseConfig';
 import { appConfig } from '../../config/appConfig';
 import type { Meeting } from './meetingTypes';
+import { authedFetch } from '../../services/authedFetch';
 
 /** Cryptographically random meeting code — NOT a predictable sequential ID. */
 function generateMeetingCode(): string {
@@ -24,15 +24,6 @@ function generateMeetingCode(): string {
   const bytes = new Uint8Array(appConfig.meetingCodeLength);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => chars[b % chars.length]).join('');
-}
-
-// Simple client-side hash so a plaintext password never sits in Firestore.
-// Not cryptographically hardened — fine for "don't let randoms guess the
-// code" style meeting passwords, not for anything security-critical.
-async function hashPassword(password: string): Promise<string> {
-  const data = new TextEncoder().encode(password);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function createMeeting(params: {
@@ -46,6 +37,27 @@ export async function createMeeting(params: {
   scheduledAt?: number | null;
   invitedUids?: string[];
 }): Promise<string> {
+  if (params.password) {
+    const response = await authedFetch('/api/meetings/protected', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: params.title,
+        description: params.description ?? '',
+        groupId: params.groupId ?? null,
+        isAudioOnly: Boolean(params.isAudioOnly),
+        password: params.password,
+        waitingRoomEnabled: Boolean(params.waitingRoomEnabled),
+        scheduledAt: params.scheduledAt ?? null,
+        invitedUids: params.invitedUids ?? [],
+      }),
+    });
+    const result = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+    if (!response.ok || !result?.code) {
+      throw new Error(result?.message ?? 'Could not create this meeting. Please try again.');
+    }
+    return result.code;
+  }
+
   const code = generateMeetingCode();
   await setDoc(doc(db, 'meetings', code), {
     title: params.title,
@@ -58,7 +70,7 @@ export async function createMeeting(params: {
     endedAt: null,
     locked: false,
     isAudioOnly: Boolean(params.isAudioOnly),
-    passwordHash: params.password ? await hashPassword(params.password) : null,
+    hasPassword: false,
     waitingRoomEnabled: Boolean(params.waitingRoomEnabled),
     activeParticipants: [],
     waitingParticipants: [],
@@ -83,7 +95,7 @@ function docToMeeting(id: string, data: any): Meeting {
     endedAt: data.endedAt?.toMillis?.() ?? null,
     locked: Boolean(data.locked),
     isAudioOnly: Boolean(data.isAudioOnly),
-    hasPassword: Boolean(data.passwordHash),
+    hasPassword: Boolean(data.hasPassword || data.passwordHash),
     waitingRoomEnabled: Boolean(data.waitingRoomEnabled),
     activeParticipants: data.activeParticipants ?? [],
     waitingParticipants: data.waitingParticipants ?? [],
@@ -93,10 +105,25 @@ function docToMeeting(id: string, data: any): Meeting {
   };
 }
 
-export async function getMeeting(code: string): Promise<Meeting | null> {
-  const snap = await getDoc(doc(db, 'meetings', code));
-  if (!snap.exists()) return null;
-  return docToMeeting(snap.id, snap.data());
+export interface MeetingLobbyPreview {
+  id: string;
+  hasPassword: boolean;
+  waitingRoomEnabled: boolean;
+  isAudioOnly: boolean;
+  locked: boolean;
+  ended: boolean;
+}
+
+export async function getMeetingLobbyPreview(code: string): Promise<MeetingLobbyPreview | null> {
+  const response = await authedFetch(`/api/meetings/${encodeURIComponent(code)}/preview`);
+  const result = await response.json().catch(() => null) as MeetingLobbyPreview | { message?: string } | null;
+  if (response.status === 404) return null;
+  if (!response.ok || !result || !('hasPassword' in result)) {
+    throw new Error(result && 'message' in result && result.message
+      ? result.message
+      : 'Could not load this meeting. Please retry.');
+  }
+  return result;
 }
 
 export function subscribeToMeeting(code: string, callback: (meeting: Meeting | null) => void): Unsubscribe {
@@ -110,11 +137,16 @@ export function subscribeToMeeting(code: string, callback: (meeting: Meeting | n
 }
 
 export async function verifyMeetingPassword(code: string, password: string): Promise<boolean> {
-  const snap = await getDoc(doc(db, 'meetings', code));
-  if (!snap.exists()) return false;
-  const data = snap.data();
-  if (!data.passwordHash) return true;
-  return (await hashPassword(password)) === data.passwordHash;
+  const response = await authedFetch(`/api/meetings/${encodeURIComponent(code)}/authorize`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+  const result = await response.json().catch(() => null) as { authorized?: boolean; message?: string } | null;
+  if (response.status === 403) return false;
+  if (!response.ok || !result?.authorized) {
+    throw new Error(result?.message ?? 'Could not verify the meeting password. Please retry.');
+  }
+  return true;
 }
 
 /**
@@ -122,29 +154,15 @@ export async function verifyMeetingPassword(code: string, password: string): Pro
  * host/a co-host), they land in `waitingParticipants` instead and must be
  * admitted — see `admitFromWaitingRoom`.
  */
-export async function joinMeeting(code: string, uid: string): Promise<{ waiting: boolean }> {
-  const meetingRef = doc(db, 'meetings', code);
-  const snap = await getDoc(meetingRef);
-  if (!snap.exists()) throw new Error('meeting-not-found');
-  const data = snap.data();
-  if (data.locked) throw new Error('meeting-locked');
-
-  const isHostOrCoHost = data.hostUid === uid || (data.coHosts ?? []).includes(uid);
-
-  if (data.waitingRoomEnabled && !isHostOrCoHost) {
-    await updateDoc(meetingRef, {
-      waitingParticipants: arrayUnion(uid),
-      allParticipants: arrayUnion(uid),
-    });
-    return { waiting: true };
-  }
-
-  await updateDoc(meetingRef, {
-    activeParticipants: arrayUnion(uid),
-    allParticipants: arrayUnion(uid),
-    startedAt: data.startedAt ?? serverTimestamp(),
+export async function joinMeeting(code: string): Promise<{ waiting: boolean }> {
+  const response = await authedFetch(`/api/meetings/${encodeURIComponent(code)}/join`, {
+    method: 'POST',
   });
-  return { waiting: false };
+  const result = await response.json().catch(() => null) as { waiting?: boolean; message?: string } | null;
+  if (!response.ok || typeof result?.waiting !== 'boolean') {
+    throw new Error(result?.message ?? 'Could not join this meeting. Please try again.');
+  }
+  return { waiting: result.waiting };
 }
 
 export async function admitFromWaitingRoom(code: string, uid: string): Promise<void> {

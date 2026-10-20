@@ -79,6 +79,114 @@ service cloud.firestore {
              || (isSignedIn() && request.auth.uid in resource.data.get('coHosts', []));
     }
 
+    function hasMeetingPassword(meeting) {
+      return ('hasPassword' in meeting && meeting.hasPassword == true)
+             || (
+               'passwordHash' in meeting
+               && meeting.passwordHash is string
+               && meeting.passwordHash.size() > 0
+             );
+    }
+
+    function hasLegacyMeetingPasswordHash(meeting) {
+      return 'passwordHash' in meeting
+             && meeting.passwordHash is string
+             && meeting.passwordHash.size() > 0;
+    }
+
+    function meetingRequiresPassword() {
+      return hasMeetingPassword(resource.data);
+    }
+
+    function canReadMeetingDocument() {
+      return isSignedIn()
+             && !hasLegacyMeetingPasswordHash(resource.data)
+             && (
+               request.auth.uid in resource.data.get('allParticipants', [])
+               || request.auth.uid in resource.data.get('invitedUids', [])
+             );
+    }
+
+    function canReadMeetingContent(meetingCode) {
+      let meetingPath = /databases/$(database)/documents/meetings/$(meetingCode);
+      return isSignedIn()
+             && exists(meetingPath)
+             && !hasLegacyMeetingPasswordHash(get(meetingPath).data)
+             && request.auth.uid in get(meetingPath).data.get('activeParticipants', []);
+    }
+
+    function canUpdateSpot(spotId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isSignedIn()
+             && canReadSpot(spotId)
+             && changed.hasOnly(['viewedBy', 'reactions'])
+             && (
+               !changed.hasAny(['viewedBy'])
+               || request.resource.data.get('viewedBy', [])
+                  == resource.data.get('viewedBy', [])
+               || listAddedOnlyByCurrentUser(
+                 resource.data.get('viewedBy', []),
+                 request.resource.data.get('viewedBy', [])
+               )
+             )
+             && (
+               !changed.hasAny(['reactions'])
+               || ownMapEntryChanged('reactions')
+             );
+    }
+
+    function canReadSpot(spotId) {
+      let feedPath = /databases/$(database)/documents/spotFeeds/$(request.auth.uid)/items/$(spotId);
+      return isSignedIn()
+             && (
+               resource.data.uid == request.auth.uid
+               || (
+                 exists(feedPath)
+                 && get(feedPath).data.ownerUid == resource.data.uid
+                 && get(feedPath).data.expiresAt == resource.data.expiresAt
+                 && resource.data.expiresAt > request.time
+                 && validSpotFeedRelationship(
+                   resource.data.uid,
+                   request.auth.uid,
+                   get(feedPath).data
+                 )
+               )
+             );
+    }
+
+    function validSpotFeedRelationship(ownerUid, viewerUid, feedData) {
+      return (
+               'chatId' in feedData
+               && feedData.chatId is string
+               && exists(/databases/$(database)/documents/chats/$(feedData.chatId))
+               && get(/databases/$(database)/documents/chats/$(feedData.chatId)).data.participants is list
+               && get(/databases/$(database)/documents/chats/$(feedData.chatId)).data.participants.size() == 2
+               && ownerUid in get(/databases/$(database)/documents/chats/$(feedData.chatId)).data.participants
+               && viewerUid in get(/databases/$(database)/documents/chats/$(feedData.chatId)).data.participants
+             )
+             || (
+               'groupId' in feedData
+               && feedData.groupId is string
+               && exists(/databases/$(database)/documents/groups/$(feedData.groupId))
+               && get(/databases/$(database)/documents/groups/$(feedData.groupId)).data.members is list
+               && ownerUid in get(/databases/$(database)/documents/groups/$(feedData.groupId)).data.members
+               && viewerUid in get(/databases/$(database)/documents/groups/$(feedData.groupId)).data.members
+             );
+    }
+
+    function canCreateSpotFeedItem(viewerUid, spotId) {
+      let spotPath = /databases/$(database)/documents/spots/$(spotId);
+      return isSignedIn()
+             && viewerUid != request.auth.uid
+             && existsAfter(spotPath)
+             && getAfter(spotPath).data.uid == request.auth.uid
+             && request.resource.data.expiresAt == getAfter(spotPath).data.expiresAt
+             && request.resource.data.ownerUid == request.auth.uid
+             && request.resource.data.keys().hasOnly(['ownerUid', 'chatId', 'groupId', 'expiresAt'])
+             && request.resource.data.keys().hasAll(['ownerUid', 'expiresAt'])
+             && validSpotFeedRelationship(request.auth.uid, viewerUid, request.resource.data);
+    }
+
     function listUnchangedOrAddedSelf(oldValues, newValues) {
       return newValues == oldValues
              || listAddedOnlyByCurrentUser(oldValues, newValues);
@@ -98,6 +206,11 @@ service cloud.firestore {
                'startedAt'
              ])
              && resource.data.get('locked', false) == false
+             && (
+               !meetingRequiresPassword()
+               || request.auth.uid == resource.data.hostUid
+               || request.auth.uid in resource.data.get('coHosts', [])
+             )
              && listUnchangedOrAddedSelf(
                resource.data.get('allParticipants', []),
                request.resource.data.get('allParticipants', [])
@@ -561,7 +674,7 @@ service cloud.firestore {
 
     // --- meetings/{meetingCode} --------------------------------------------
     match /meetings/{meetingCode} {
-      allow read: if isSignedIn();
+      allow read: if canReadMeetingDocument();
       allow create: if isSignedIn()
                     && request.resource.data.hostUid == request.auth.uid
                     && request.resource.data.get('coHosts', []) == []
@@ -572,7 +685,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /chat/{messageId} {
-        allow read: if isSignedIn();
+        allow read: if canReadMeetingContent(meetingCode);
         allow create: if isSignedIn()
                       && request.resource.data.senderId == request.auth.uid
                       && request.auth.uid in get(
@@ -582,7 +695,7 @@ service cloud.firestore {
       }
 
       match /qna/{questionId} {
-        allow read: if isSignedIn();
+        allow read: if canReadMeetingContent(meetingCode);
         allow create: if isSignedIn()
                       && request.resource.data.askedBy == request.auth.uid
                       && request.auth.uid in get(
@@ -616,7 +729,7 @@ service cloud.firestore {
       }
 
       match /polls/{pollId} {
-        allow read: if isSignedIn();
+        allow read: if canReadMeetingContent(meetingCode);
         allow create: if isSignedIn()
                       && request.resource.data.createdBy == request.auth.uid
                       && request.auth.uid in get(
@@ -655,7 +768,7 @@ service cloud.firestore {
       // Written ONLY by the backend via the Admin SDK (bypasses these rules) —
       // clients are strictly read-only for live-stream state.
       match /meta/{docId} {
-        allow read: if isSignedIn();
+        allow read: if canReadMeetingContent(meetingCode);
         allow write: if false;
       }
     }
@@ -756,13 +869,38 @@ service cloud.firestore {
 
     // --- spots/{spotId} — Spot stories, 24h expiry (see TTL note below) ---
     match /spots/{spotId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      // Author can edit their own spot (used for view/reaction updates from
-      // OTHER users too — Spot reactions/views need any signed-in user to
-      // write to viewedBy/reactions on someone else's doc).
-      allow update: if isSignedIn();
+      allow get: if canReadSpot(spotId);
+      allow list: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && (
+                      request.resource.data.get('mediaUrl', null) is string
+                      || request.resource.data.get('mediaUrl', null) == null
+                    );
+      // View and reaction metadata may change only for the authenticated viewer.
+      allow update: if canUpdateSpot(spotId);
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+      match /audience/{viewerUid} {
+        function spotPath() {
+          return /databases/$(database)/documents/spots/$(spotId);
+        }
+
+        allow get, list: if isSignedIn()
+                         && exists(spotPath())
+                         && get(spotPath()).data.uid == request.auth.uid;
+        allow create: if canCreateSpotFeedItem(viewerUid, spotId);
+        allow update: if false;
+        allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      }
+    }
+
+    match /spotFeeds/{viewerUid}/items/{spotId} {
+      allow get, list: if isSignedIn() && request.auth.uid == viewerUid;
+      allow create: if canCreateSpotFeedItem(viewerUid, spotId);
+      allow update: if false;
+      allow delete: if isSignedIn()
+                    && (request.auth.uid == viewerUid || resource.data.ownerUid == request.auth.uid);
     }
 
     // --- blocks/{uid_blockedUid} --------------------------------------------

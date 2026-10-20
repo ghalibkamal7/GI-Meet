@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Smile, Reply, Forward, Copy, Star, Pin, Pencil, Trash2, Paperclip, MoreHorizontal } from 'lucide-react';
 import type { Message } from '../../features/chat/chatTypes';
 import { EmojiPicker } from './EmojiPicker';
+import { useToast } from '../../context/ToastContext';
 
 interface Props {
   message: Message;
@@ -30,12 +31,19 @@ export function MessageBubble({
   onTogglePin,
   isPinned,
 }: Props) {
+  const { showToast } = useToast();
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const isStarred = message.starredBy.includes(currentUid);
 
-  function handleCopy() {
-    if (message.text) navigator.clipboard.writeText(message.text);
+  async function handleCopy() {
+    if (!message.text) return;
+    try {
+      await navigator.clipboard.writeText(message.text);
+      showToast('Message copied.', 'success');
+    } catch {
+      showToast('Clipboard access failed. Check browser permissions and try again.', 'error');
+    }
   }
 
   const reactionEntries = Object.entries(message.reactions).filter(([, uids]) => uids.length > 0);

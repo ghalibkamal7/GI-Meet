@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { createUserProfile, getUsernameOwner } from '../../services/userService';
 import { isValidUsername, normalizeUsername } from '../../utils/validators';
 import { classifyError } from '../../services/profileState';
@@ -25,6 +26,7 @@ function describeSetupError(error: unknown): string {
 
 export function ProfileSetup() {
   const { firebaseUser, loading, needsProfileSetup, profileError, retryProfileLoad, refreshProfile } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
@@ -71,7 +73,10 @@ export function ProfileSetup() {
       try {
         await ensureDeviceKeys(firebaseUser!.uid);
       } catch {
-        // Non-fatal — chats fall back to plaintext until a key exists.
+        showToast(
+          'Your profile was saved, but encrypted chat could not initialize on this device. Messages stay protected; check storage and connection, or enroll a key in Settings > Security.',
+          'error'
+        );
       }
 
       // Re-reads users/{uid}; only after it is CONFIRMED does needsProfileSetup become false.
@@ -92,7 +97,9 @@ export function ProfileSetup() {
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
+            <label htmlFor="profile-username" style={{ ...fieldLabel, display: 'block', marginBottom: 6 }}>Username</label>
             <input
+              id="profile-username"
               className="rb-input"
               type="text"
               placeholder="username"
@@ -104,7 +111,9 @@ export function ProfileSetup() {
               3-20 characters: lowercase letters, numbers, underscores.
             </p>
           </div>
+          <label htmlFor="profile-bio" style={{ ...fieldLabel, display: 'block', marginBottom: -6 }}>Short bio (optional)</label>
           <textarea
+            id="profile-bio"
             className="rb-input"
             placeholder="Short bio (optional)"
             value={bio}
@@ -125,3 +134,9 @@ export function ProfileSetup() {
     </div>
   );
 }
+
+const fieldLabel: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--color-text-muted)',
+};

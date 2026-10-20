@@ -67,25 +67,31 @@ export function SignupPage() {
         </p>
 
         <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label style={fieldLabel} htmlFor="signup-name">Full name</label>
           <input
+            id="signup-name"
             className="rb-input"
             type="text"
-            placeholder="Full name"
+            placeholder="Your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             autoComplete="name"
           />
+          <label style={fieldLabel} htmlFor="signup-email">Email</label>
           <input
+            id="signup-email"
             className="rb-input"
             type="email"
-            placeholder="Email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
           />
+          <label style={fieldLabel} htmlFor="signup-password">Password</label>
           <input
+            id="signup-password"
             className="rb-input"
             type="password"
             placeholder="Password (min. 8 characters)"
@@ -94,7 +100,7 @@ export function SignupPage() {
             required
             autoComplete="new-password"
           />
-          {error && <p className="rb-error-text">{error}</p>}
+          {error && <p className="rb-error-text" role="alert">{error}</p>}
           <button className="rb-btn rb-btn--primary" type="submit" disabled={submitting}>
             {submitting ? 'Creating account…' : 'Create account'}
           </button>
@@ -107,3 +113,10 @@ export function SignupPage() {
     </div>
   );
 }
+
+const fieldLabel: React.CSSProperties = {
+  marginBottom: -8,
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--color-text-muted)',
+};

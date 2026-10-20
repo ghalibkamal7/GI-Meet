@@ -1,26 +1,38 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getMeeting } from './meetingService';
+import { getMeetingLobbyPreview } from './meetingService';
 
 export function JoinMeetingModal({ onClose }: { onClose: () => void }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
   const navigate = useNavigate();
 
   async function handleJoin() {
     const trimmed = code.trim().toUpperCase();
-    if (!trimmed) return;
-    const meeting = await getMeeting(trimmed);
-    if (!meeting) {
-      setError("That meeting code doesn't exist.");
+    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(trimmed) || joining) {
+      setError('Enter a valid 8-character meeting code.');
       return;
     }
-    if (meeting.locked && meeting.endedAt) {
-      setError('This meeting has ended.');
-      return;
+    setJoining(true);
+    setError(null);
+    try {
+      const meeting = await getMeetingLobbyPreview(trimmed);
+      if (!meeting) {
+        setError("That meeting code doesn't exist.");
+        return;
+      }
+      if (meeting.locked && meeting.ended) {
+        setError('This meeting has ended.');
+        return;
+      }
+      onClose();
+      navigate(`/meeting/${trimmed}/lobby`);
+    } catch {
+      setError('Could not check this meeting. Check your connection and retry.');
+    } finally {
+      setJoining(false);
     }
-    onClose();
-    navigate(`/meeting/${trimmed}/lobby`);
   }
 
   return (
@@ -36,8 +48,8 @@ export function JoinMeetingModal({ onClose }: { onClose: () => void }) {
           autoFocus
         />
         {error && <p className="rb-error-text" style={{ marginTop: 8 }}>{error}</p>}
-        <button className="rb-btn rb-btn--primary" style={{ width: '100%', marginTop: 14 }} onClick={handleJoin}>
-          Join
+        <button className="rb-btn rb-btn--primary" style={{ width: '100%', marginTop: 14 }} onClick={() => void handleJoin()} disabled={joining}>
+          {joining ? 'Checking…' : 'Join'}
         </button>
       </div>
     </div>
