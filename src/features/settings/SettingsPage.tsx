@@ -161,7 +161,7 @@ export function SettingsPage() {
   ];
 
   return (
-    <div className="rb-settings-layout">
+    <div className="rb-settings-layout rb-settings-page">
       <div className="rb-settings-nav" role="tablist" aria-label="Settings sections">
         {TABS.map((t) => (
           <button
@@ -171,22 +171,7 @@ export function SettingsPage() {
             role="tab"
             aria-selected={tab === t.id}
             aria-controls="settings-panel"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              width: '100%',
-              textAlign: 'left',
-              padding: '9px 10px',
-              borderRadius: 8,
-              border: 'none',
-              marginBottom: 2,
-              background: tab === t.id ? 'var(--color-brand-100)' : 'transparent',
-              color: tab === t.id ? 'var(--color-brand-600)' : 'var(--color-text)',
-              fontWeight: tab === t.id ? 600 : 500,
-              fontSize: 14,
-              cursor: 'pointer',
-            }}
+            className={`rb-settings-nav__tab${tab === t.id ? ' is-active' : ''}`}
           >
             <t.Icon size={16} strokeWidth={1.75} aria-hidden="true" />
             {t.label}
@@ -197,16 +182,20 @@ export function SettingsPage() {
       <div className="rb-settings-panel" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
         {tab === 'account' && (
           <>
-            <h2 style={{ fontSize: 18, marginBottom: 16 }}>Account</h2>
+            <header className="rb-settings-panel__header">
+              <span className="rb-eyebrow">Your profile</span>
+              <h2>Account</h2>
+              <p>Manage how you appear to your contacts.</p>
+            </header>
             <div style={{ marginBottom: 20 }}>
               <ProfilePhotoEditor />
             </div>
-            <label style={fieldLabel}>Display name</label>
-            <input className="rb-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={{ marginBottom: 14 }} />
-            <label style={fieldLabel}>Username</label>
-            <input className="rb-input" value={`@${profile.username}`} disabled style={{ marginBottom: 14, opacity: 0.6 }} />
-            <label style={fieldLabel}>Bio</label>
-            <textarea className="rb-input" value={bio} onChange={(e) => setBio(e.target.value)} rows={3} maxLength={160} style={{ marginBottom: 16 }} />
+            <label style={fieldLabel} htmlFor="settings-display-name">Display name</label>
+            <input id="settings-display-name" className="rb-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={{ marginBottom: 14 }} />
+            <label style={fieldLabel} htmlFor="settings-username">Username</label>
+            <input id="settings-username" className="rb-input" value={`@${profile.username}`} disabled style={{ marginBottom: 14, opacity: 0.6 }} />
+            <label style={fieldLabel} htmlFor="settings-bio">Bio</label>
+            <textarea id="settings-bio" className="rb-input" value={bio} onChange={(e) => setBio(e.target.value)} rows={3} maxLength={160} style={{ marginBottom: 16 }} />
             <button className="rb-btn rb-btn--primary" onClick={handleSaveAccount} disabled={saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
@@ -215,7 +204,11 @@ export function SettingsPage() {
 
         {tab === 'privacy' && (
           <>
-            <h2 style={{ fontSize: 18, marginBottom: 16 }}>Privacy</h2>
+            <header className="rb-settings-panel__header">
+              <span className="rb-eyebrow">Your boundaries</span>
+              <h2>Privacy</h2>
+              <p>Choose what information is visible to others.</p>
+            </header>
             <div style={{ marginBottom: 20 }}>
               <PrivacySettingsLink />
             </div>
@@ -235,7 +228,11 @@ export function SettingsPage() {
 
         {tab === 'notifications' && (
           <>
-            <h2 style={{ fontSize: 18, marginBottom: 16 }}>Notifications</h2>
+            <header className="rb-settings-panel__header">
+              <span className="rb-eyebrow">Stay in the know</span>
+              <h2>Notifications</h2>
+              <p>Choose how GI Meet keeps you updated.</p>
+            </header>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 16 }}>
               Get notified about new messages, calls, and meeting invites even when {appConfig.name} isn't open.
             </p>
@@ -248,7 +245,11 @@ export function SettingsPage() {
 
         {tab === 'appearance' && (
           <>
-            <h2 style={{ fontSize: 18, marginBottom: 16 }}>Appearance</h2>
+            <header className="rb-settings-panel__header">
+              <span className="rb-eyebrow">Make it yours</span>
+              <h2>Appearance</h2>
+              <p>Choose a theme for this device.</p>
+            </header>
             {(['light', 'dark', 'system'] as const).map((option) => (
               <label key={option} style={toggleRow}>
                 <input type="radio" name="theme" checked={preference === option} onChange={() => setPreference(option)} />
@@ -260,7 +261,11 @@ export function SettingsPage() {
 
         {tab === 'security' && (
           <>
-            <h2 style={{ fontSize: 18, marginBottom: 16 }}>Security</h2>
+            <header className="rb-settings-panel__header">
+              <span className="rb-eyebrow">Keep your account safe</span>
+              <h2>Security</h2>
+              <p>Review encryption and device access.</p>
+            </header>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 14, marginBottom: 16 }}>
               Signed in as {profile.email}
             </p>

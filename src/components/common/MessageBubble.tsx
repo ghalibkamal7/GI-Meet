@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Smile, Reply, Forward, Copy, Star, Pin, Pencil, Trash2, Paperclip } from 'lucide-react';
+import { Smile, Reply, Forward, Copy, Star, Pin, Pencil, Trash2, Paperclip, MoreHorizontal } from 'lucide-react';
 import type { Message } from '../../features/chat/chatTypes';
 import { EmojiPicker } from './EmojiPicker';
 import { useToast } from '../../context/ToastContext';
@@ -65,31 +65,28 @@ export function MessageBubble({
         }
       }}
     >
-      <div style={{ maxWidth: '70%', position: 'relative' }}>
-        {showActions && !message.deleted && (
-          <div
-            id={`message-actions-${message.id}`}
-            data-message-actions
-            role="group"
-            aria-label="Message actions"
-            style={{
-              position: 'absolute',
-              top: -32,
-              right: isOwn ? 0 : 'auto',
-              left: isOwn ? 'auto' : 0,
-              display: 'flex',
-              flexWrap: 'wrap',
-              width: 'min(320px, calc(100vw - 32px))',
-              boxSizing: 'border-box',
-              zIndex: 2,
-              gap: 2,
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 10,
-              padding: 3,
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
+      <div className="rb-message-wrap" data-own-message={isOwn}>
+      {!message.deleted && (
+        <button
+          type="button"
+          className="rb-message-action-trigger"
+          aria-label={showActions ? 'Hide message actions' : 'Show message actions'}
+          aria-expanded={showActions}
+          aria-controls={showActions ? `message-actions-${message.id}` : undefined}
+          onClick={() => setShowActions((visible) => !visible)}
+        >
+          <MoreHorizontal size={17} strokeWidth={2} aria-hidden="true" />
+        </button>
+      )}
+      {showActions && !message.deleted && (
+        <div
+          id={`message-actions-${message.id}`}
+          data-message-actions
+          className="rb-message-actions"
+          role="group"
+          aria-label="Message actions"
+          data-own-message={isOwn}
+        >
             {onToggleReaction && (
               <span style={{ position: 'relative' }}>
                 <button type="button" onClick={() => setShowEmojiPicker((v) => !v)} style={actionBtnStyle} aria-label="React">

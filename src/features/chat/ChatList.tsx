@@ -270,10 +270,10 @@ export function ChatList() {
       <div className="rb-chats-controls">
         <h1>Chats</h1>
         <div className="rb-chats-controls__actions">
-          <button className="rb-btn rb-btn--outline" style={{ fontSize: 13, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowArchived((v) => !v)}>
+          <button className="rb-btn rb-btn--outline" onClick={() => setShowArchived((v) => !v)}>
             <Archive size={15} strokeWidth={1.75} /> {showArchived ? 'Back to chats' : 'Archived'}
           </button>
-          <button className="rb-btn rb-btn--primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowNewChat(true)}>
+          <button className="rb-btn rb-btn--primary" onClick={() => setShowNewChat(true)}>
             <Plus size={16} strokeWidth={2} /> New Chat
           </button>
           <div className="rb-request-notifications">
@@ -400,74 +400,25 @@ export function ChatList() {
             onClick={() => navigate(`/chat/${chat.id}`)}
             className="rb-chat-list-item"
             aria-label={`Open chat with ${otherInfo?.displayName ?? 'Unknown user'}${unread > 0 ? `, ${unread} unread messages` : ''}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              width: '100%',
-              padding: '12px 20px',
-              background: 'none',
-              border: 'none',
-              borderBottom: '1px solid var(--color-border)',
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
           >
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: '50%',
-                background: 'var(--color-brand-100)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 600,
-                color: 'var(--color-brand-600)',
-                flexShrink: 0,
-                overflow: 'hidden',
-              }}
-            >
+            <div className="rb-chat-list-item__avatar">
               {otherInfo?.photoURL ? (
                 <img src={otherInfo.photoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 (otherInfo?.displayName ?? '?').charAt(0).toUpperCase()
               )}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="rb-chat-list-item__body">
+              <div className="rb-chat-list-item__name">
                 {otherInfo?.displayName ?? 'Unknown user'}
                 {isMuted && <BellOff size={12} strokeWidth={1.75} color="var(--color-text-muted)" />}
               </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: isTyping ? 'var(--color-brand-600)' : 'var(--color-text-muted)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              <div className={`rb-chat-list-item__preview${isTyping ? ' is-typing' : ''}`}>
                 {isTyping ? 'typing…' : chat.lastMessageCipher ? <ChatPreviewText chat={chat} /> : neutralizePreview(chat.lastMessage) || 'Say hello'}
               </div>
             </div>
             {unread > 0 && !isMuted && (
-              <span
-                aria-hidden="true"
-                style={{
-                  background: 'var(--color-brand-600)',
-                  color: '#fff',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderRadius: 999,
-                  minWidth: 20,
-                  height: 20,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 6px',
-                }}
-              >
+              <span aria-hidden="true" className="rb-chat-list-item__unread">
                 {unread}
               </span>
             )}

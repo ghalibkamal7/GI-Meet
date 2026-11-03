@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { PhoneMissed, PhoneIncoming, PhoneOutgoing } from 'lucide-react';
+import { PhoneMissed, PhoneIncoming, PhoneOutgoing, Phone } from 'lucide-react';
 import { db } from '../../firebase/firebaseConfig';
 import { useAuth } from '../../context/AuthContext';
 
@@ -51,19 +51,32 @@ export function CallHistoryPage() {
   }
 
   return (
-    <div className="rb-page rb-page--narrow">
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Calls</h1>
-      {entries.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No calls yet.</p>}
+    <div className="rb-page rb-page--narrow rb-calls-page">
+      <header className="rb-calls-header">
+        <div>
+          <span className="rb-eyebrow">Stay in the loop</span>
+          <h1>Calls</h1>
+          <p>Your recent voice and video conversations.</p>
+        </div>
+        <div className="rb-calls-header__mark" aria-hidden="true"><Phone size={22} /></div>
+      </header>
+      {entries.length === 0 && (
+        <div className="rb-empty-state rb-calls-empty">
+          <div className="rb-empty-state__icon"><Phone size={20} /></div>
+          <h2>No calls yet</h2>
+          <p>Calls with your contacts will show up here.</p>
+        </div>
+      )}
       {entries.map((entry) => (
-        <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
-          <span style={{ display: 'flex' }}>{icon(entry)}</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{entry.otherName}</div>
-            <div style={{ fontSize: 12, color: entry.outcome === 'missed' ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
+        <div key={entry.id} className="rb-call-history-row">
+          <span className={`rb-call-history-row__icon${entry.outcome === 'missed' ? ' is-missed' : ''}`}>{icon(entry)}</span>
+          <div className="rb-call-history-row__identity">
+            <div className="rb-call-history-row__name">{entry.otherName}</div>
+            <div className={`rb-call-history-row__type${entry.outcome === 'missed' ? ' is-missed' : ''}`}>
               {label(entry)}
             </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'right' }}>
+          <div className="rb-call-history-row__time">
             <div>{new Date(entry.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
             {entry.durationSeconds > 0 && <div>{Math.round(entry.durationSeconds / 60)} min</div>}
           </div>

@@ -69,72 +69,87 @@ export function GroupList() {
   const visibleGroups = groups.filter((g) => !g.communityId); // sub-groups show inside their community, not here
 
   return (
-    <div className="rb-list-page">
-      <div style={{ padding: '0 20px 12px' }}>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-alt)', borderRadius: 10, padding: 3, width: 'fit-content' }}>
-          <button onClick={() => setTab('groups')} style={tabBtnStyle(tab === 'groups')}>Groups</button>
-          <button onClick={() => setTab('communities')} style={tabBtnStyle(tab === 'communities')}>Communities</button>
+    <div className="rb-list-page rb-groups-page">
+      <header className="rb-groups-header">
+        <div>
+          <span className="rb-eyebrow">Together, in one place</span>
+          <h1>Groups &amp; communities</h1>
+          <p>Find your people and keep the conversation going.</p>
         </div>
-      </div>
+        <div className="rb-groups-tabs" role="group" aria-label="Groups and communities">
+          <button type="button" aria-pressed={tab === 'groups'} onClick={() => setTab('groups')} className={tab === 'groups' ? 'is-active' : ''}>Groups</button>
+          <button type="button" aria-pressed={tab === 'communities'} onClick={() => setTab('communities')} className={tab === 'communities' ? 'is-active' : ''}>Communities</button>
+        </div>
+      </header>
 
       {tab === 'groups' ? (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 20px 16px' }}>
-            <h1 style={{ fontSize: 22 }}>Groups</h1>
-            <button className="rb-btn rb-btn--primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowCreate(true)}>
+          <div className="rb-section-heading">
+            <h2>Your groups <span>{visibleGroups.length}</span></h2>
+            <button className="rb-btn rb-btn--primary" onClick={() => setShowCreate(true)}>
               <Plus size={16} strokeWidth={2} /> New group
             </button>
           </div>
 
           {loading && <SkeletonList rows={4} />}
           {!loading && visibleGroups.length === 0 && (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)' }}>No groups yet.</div>
+            <div className="rb-empty-state rb-groups-empty">
+              <div className="rb-empty-state__icon"><Plus size={20} /></div>
+              <h2>Your group space is waiting</h2>
+              <p>Create a group to bring a conversation together.</p>
+            </div>
           )}
 
           {visibleGroups.map((group) => (
             <button
               key={group.id}
               onClick={() => navigate(`/groups/${group.id}`)}
-              style={rowStyle}
+              className="rb-group-row"
             >
-              <div style={avatarStyle}>{group.name.charAt(0).toUpperCase()}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{group.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div className="rb-group-row__avatar">{group.name.charAt(0).toUpperCase()}</div>
+              <div className="rb-group-row__body">
+                <div className="rb-group-row__title">{group.name}</div>
+                <div className="rb-group-row__preview">
                   {group.lastMessage || `${group.members.length} members`}
                 </div>
               </div>
+              <span className="rb-group-row__meta">{group.members.length} members</span>
             </button>
           ))}
         </>
       ) : (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 20px 16px', flexWrap: 'wrap', gap: 8 }}>
-            <h1 style={{ fontSize: 22 }}>Communities</h1>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="rb-btn rb-btn--outline" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }} onClick={() => setShowDiscover(true)}>
+          <div className="rb-section-heading">
+            <h2>Your communities <span>{communities.length}</span></h2>
+            <div className="rb-section-heading__actions">
+              <button className="rb-btn rb-btn--outline" onClick={() => setShowDiscover(true)}>
                 <Compass size={15} strokeWidth={1.75} /> Discover
               </button>
-              <button className="rb-btn rb-btn--primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowCreateCommunity(true)}>
+              <button className="rb-btn rb-btn--primary" onClick={() => setShowCreateCommunity(true)}>
                 <Plus size={16} strokeWidth={2} /> New
               </button>
             </div>
           </div>
 
           {communities.length === 0 && (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-              No communities yet — create one, or discover a public community to join.
+            <div className="rb-empty-state rb-groups-empty">
+              <div className="rb-empty-state__icon"><Compass size={20} /></div>
+              <h2>Find your community</h2>
+              <p>Create a private space or discover a public community to join.</p>
             </div>
           )}
 
-          {communities.map((c) => (
-            <button key={c.id} onClick={() => navigate(`/communities/${c.id}`)} style={rowStyle}>
-              <div style={{ ...avatarStyle, borderRadius: 12 }}>{c.name.charAt(0).toUpperCase()}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{c.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  {c.isPublic ? <Globe size={12} strokeWidth={1.75} /> : <Lock size={12} strokeWidth={1.75} />}
-                  {c.members.length} members · {c.groupIds.length} groups
+          {communities.map((community) => (
+            <button key={community.id} onClick={() => navigate(`/communities/${community.id}`)} className="rb-group-row">
+              <div className="rb-group-row__avatar rb-group-row__avatar--community">{community.name.charAt(0).toUpperCase()}</div>
+              <div className="rb-group-row__body">
+                <div className="rb-group-row__title">{community.name}</div>
+                <div className="rb-group-row__preview rb-group-row__preview--meta">
+                  <span>
+                    {community.isPublic ? <Globe size={12} strokeWidth={1.75} /> : <Lock size={12} strokeWidth={1.75} />}
+                    {community.isPublic ? 'Public' : 'Private'}
+                  </span>
+                  {community.members.length} members · {community.groupIds.length} groups
                 </div>
               </div>
             </button>
@@ -148,43 +163,3 @@ export function GroupList() {
     </div>
   );
 }
-
-function tabBtnStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: '6px 16px',
-    borderRadius: 8,
-    border: 'none',
-    background: active ? 'var(--color-surface)' : 'transparent',
-    color: active ? 'var(--color-brand-600)' : 'var(--color-text-muted)',
-    fontWeight: active ? 600 : 500,
-    fontSize: 13.5,
-    cursor: 'pointer',
-    boxShadow: active ? 'var(--shadow-sm)' : 'none',
-  };
-}
-
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  width: '100%',
-  padding: '12px 20px',
-  background: 'none',
-  border: 'none',
-  borderBottom: '1px solid var(--color-border)',
-  textAlign: 'left',
-  cursor: 'pointer',
-};
-
-const avatarStyle: React.CSSProperties = {
-  width: 44,
-  height: 44,
-  borderRadius: 12,
-  background: 'var(--color-accent)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontWeight: 700,
-  color: '#fff',
-  flexShrink: 0,
-};

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { BottomNav } from './BottomNav';
 import { IncomingCallListener } from '../../features/calls/IncomingCallListener';
@@ -10,7 +10,9 @@ import { registerForPushNotifications, setupPushListeners } from '../../services
 
 export function AppShell() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { profile } = useAuth();
+  const isConversationRoute = pathname.startsWith('/chat/') || /^\/groups\/[^/]+$/.test(pathname);
 
   useEffect(() => {
     if (isNativePlatform()) {
@@ -25,13 +27,13 @@ export function AppShell() {
   }, [profile, navigate]);
 
   return (
-    <div className="rb-app-shell" style={{ height: '100%', display: 'flex', paddingTop: 'var(--safe-top)' }}>
+    <div className={`rb-app-shell${isConversationRoute ? ' rb-app-shell--conversation' : ''}`}>
       <div className="rb-desktop-only rb-sidebar-slot">
         <Sidebar />
       </div>
 
-      <div className="rb-app-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <main className="rb-route-content" style={{ flex: 1, overflow: 'auto' }}>
+      <div className="rb-app-main">
+        <main className="rb-route-content">
           <Outlet />
         </main>
         <div className="rb-mobile-only rb-bottom-nav-slot">
@@ -41,15 +43,6 @@ export function AppShell() {
 
       <IncomingCallListener />
       <PwaPrompts />
-
-      <style>{`
-        .rb-mobile-only { display: none; }
-        @media (max-width: 768px) {
-          .rb-desktop-only { display: none; }
-          .rb-mobile-only { display: block; }
-          .rb-route-content { padding-bottom: 0; }
-        }
-      `}</style>
     </div>
   );
 }

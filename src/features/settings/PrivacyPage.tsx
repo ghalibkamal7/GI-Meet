@@ -4,12 +4,12 @@ import { ArrowLeft, EyeOff, KeyRound, Lock, ShieldCheck } from 'lucide-react';
 
 function Section({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
-    <section className="rb-card" style={{ padding: '16px 18px', marginBottom: 14 }}>
-      <h2 style={{ fontSize: 17, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+    <section className="rb-card rb-privacy-section">
+      <h2>
         {icon}
         {title}
       </h2>
-      <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--color-text)' }}>{children}</div>
+      <div className="rb-privacy-section__content">{children}</div>
     </section>
   );
 }
@@ -25,26 +25,18 @@ export function PrivacyPage() {
       <button
         type="button"
         onClick={() => navigate('/settings')}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'var(--color-text-muted)',
-          fontSize: 14,
-          padding: '8px 0',
-          marginBottom: 4,
-        }}
+        className="rb-privacy-back"
       >
         <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" /> Settings
       </button>
 
-      <h1 style={{ fontSize: 26, marginBottom: 6 }}>Privacy &amp; encryption</h1>
-      <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
+      <header className="rb-privacy-header">
+        <span className="rb-eyebrow">Clear about your privacy</span>
+        <h1>Privacy &amp; encryption</h1>
+      <p>
         GI Meet is built so that what you write in a private chat can only be read by you and the people you are talking to.
       </p>
+      </header>
 
       <Section icon={<Lock {...iconProps} />} title="What is end-to-end encrypted">
         <ul style={listStyle}>

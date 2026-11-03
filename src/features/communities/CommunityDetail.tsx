@@ -77,30 +77,31 @@ export function CommunityDetail() {
 
   return (
     <div className="rb-page rb-page--narrow rb-community-detail">
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 22, color: '#fff', flexShrink: 0 }}>
+      <header className="rb-community-header">
+        <div className="rb-community-header__avatar">
           {community.name.charAt(0).toUpperCase()}
         </div>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 20, marginBottom: 2 }}>{community.name}</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 4 }}>{community.description}</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--color-text-muted)' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div className="rb-community-header__body">
+          <span className="rb-eyebrow">Community</span>
+          <h1>{community.name}</h1>
+          <p>{community.description}</p>
+          <div className="rb-community-header__meta">
+            <span>
               {community.isPublic ? <Globe size={12} strokeWidth={1.75} /> : <Lock size={12} strokeWidth={1.75} />}
               {community.isPublic ? 'Public' : 'Private'}
             </span>
-            <button onClick={() => setShowMembers(true)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>
+            <button onClick={() => setShowMembers(true)}>
               {community.members.length} members
             </button>
             <span>{subGroups.length} groups</span>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="rb-card" style={{ padding: 16, marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontWeight: 600, fontSize: 14 }}>
+      <section className="rb-card rb-community-announcements">
+        <h2 className="rb-section-title">
           <Megaphone size={16} strokeWidth={1.75} /> Announcements
-        </div>
+        </h2>
         {isAdmin && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
             <input className="rb-input" placeholder="Post to the whole community..." value={announceText} onChange={(e) => setAnnounceText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePostAnnouncement()} />
@@ -114,11 +115,11 @@ export function CommunityDetail() {
             <div>{a.text}</div>
           </div>
         ))}
-      </div>
+      </section>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <h2 style={{ fontSize: 15 }}>Groups in this community</h2>
-        <button className="rb-btn rb-btn--outline" style={{ fontSize: 12, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setShowNewGroup(true)}>
+      <div className="rb-section-heading rb-community-groups-heading">
+        <h2>Groups in this community <span>{subGroups.length}</span></h2>
+        <button className="rb-btn rb-btn--outline" onClick={() => setShowNewGroup(true)}>
           <Plus size={13} strokeWidth={1.75} /> New group
         </button>
       </div>
@@ -134,19 +135,19 @@ export function CommunityDetail() {
         <button
           key={g.id}
           onClick={() => navigate(`/groups/${g.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 0', background: 'none', border: 'none', borderBottom: '1px solid var(--color-border)', textAlign: 'left', cursor: 'pointer' }}
+          className="rb-community-group-row"
         >
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-brand-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, color: 'var(--color-brand-600)' }}>
+          <div className="rb-community-group-row__avatar">
             {g.name.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{g.name}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{g.members.length} members</div>
+          <div className="rb-community-group-row__body">
+            <div className="rb-community-group-row__title">{g.name}</div>
+            <div className="rb-community-group-row__meta">{g.members.length} members</div>
           </div>
         </button>
       ))}
 
-      <button className="rb-btn rb-btn--outline" style={{ marginTop: 24, color: 'var(--color-danger)' }} onClick={() => setShowLeaveConfirm(true)}>
+      <button className="rb-btn rb-btn--outline rb-community-leave" onClick={() => setShowLeaveConfirm(true)}>
         Leave community
       </button>
 

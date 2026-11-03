@@ -40,54 +40,68 @@ export function MeetingsPage() {
 
   return (
     <div className="rb-page rb-meetings-page">
-      <h1 style={{ fontSize: 22, marginBottom: 20 }}>Meetings</h1>
+      <header className="rb-meetings-header">
+        <div>
+          <span className="rb-eyebrow">Make time to connect</span>
+          <h1>Meetings</h1>
+          <p>Start a call, join with a code, or plan it for later.</p>
+        </div>
+        <div className="rb-meetings-header__mark" aria-hidden="true"><Video size={24} /></div>
+      </header>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-        <button className="rb-btn rb-btn--primary" style={btnRowStyle} onClick={() => handleNewMeeting(false)}><Video size={16} strokeWidth={1.75} /> New meeting</button>
-        <button className="rb-btn rb-btn--outline" style={btnRowStyle} onClick={() => handleNewMeeting(true)}><Phone size={16} strokeWidth={1.75} /> New voice call</button>
-        <button className="rb-btn rb-btn--outline" style={btnRowStyle} onClick={() => setShowJoin(true)}><Link2 size={16} strokeWidth={1.75} /> Join with code</button>
-        <button className="rb-btn rb-btn--outline" style={btnRowStyle} onClick={() => setShowSchedule(true)}><CalendarPlus size={16} strokeWidth={1.75} /> Schedule</button>
+      <div className="rb-meetings-actions">
+        <button className="rb-btn rb-btn--primary" onClick={() => handleNewMeeting(false)}><Video size={17} strokeWidth={1.75} /> New meeting</button>
+        <button className="rb-btn rb-btn--outline" onClick={() => handleNewMeeting(true)}><Phone size={17} strokeWidth={1.75} /> New voice call</button>
+        <button className="rb-btn rb-btn--outline" onClick={() => setShowJoin(true)}><Link2 size={17} strokeWidth={1.75} /> Join with code</button>
+        <button className="rb-btn rb-btn--outline" onClick={() => setShowSchedule(true)}><CalendarPlus size={17} strokeWidth={1.75} /> Schedule</button>
       </div>
 
       {upcoming.length > 0 && (
-        <>
-          <h2 style={{ fontSize: 16, marginBottom: 12 }}>Upcoming</h2>
+        <section className="rb-meetings-section">
+          <h2 className="rb-section-title">Coming up</h2>
           {upcoming.map((m) => (
-            <div key={m.id} className="rb-card" style={{ padding: '10px 14px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{m.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+            <div key={m.id} className="rb-card rb-meeting-list-card">
+              <div className="rb-meeting-list-card__main">
+                <div className="rb-meeting-list-card__icon"><Video size={17} /></div>
+                <div className="rb-meeting-list-card__text">
+                  <div className="rb-meeting-list-card__title">{m.title}</div>
+                  <div className="rb-meeting-list-card__meta">
                   {m.scheduledAt && new Date(m.scheduledAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </div>
                 </div>
               </div>
-              <button className="rb-btn rb-btn--outline" style={{ padding: '6px 12px', fontSize: 13 }} onClick={() => navigate(`/meeting/${m.id}/lobby`)}>
+              <button className="rb-btn rb-btn--outline" onClick={() => navigate(`/meeting/${m.id}/lobby`)}>
                 Join
               </button>
             </div>
           ))}
-        </>
+        </section>
       )}
 
-      <h2 style={{ fontSize: 16, margin: '20px 0 12px' }}>History</h2>
-      {history.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No past meetings yet.</p>}
-      {Object.entries(grouped).map(([day, entries]) => (
-        <div key={day} style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 6 }}>{day}</div>
-          {entries.map((entry) => (
-            <div key={entry.id} className="rb-card" style={{ padding: '10px 14px', marginBottom: 6 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{entry.title}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                {new Date(entry.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {entry.durationMinutes} min
+      <section className="rb-meetings-section">
+        <h2 className="rb-section-title">Recent meetings</h2>
+        {history.length === 0 && <div className="rb-empty-state rb-meetings-empty"><p>No past meetings yet. Your recent calls will appear here.</p></div>}
+        {Object.entries(grouped).map(([day, entries]) => (
+          <div key={day} className="rb-meeting-day">
+            <div className="rb-meeting-day__label">{day}</div>
+            {entries.map((entry) => (
+              <div key={entry.id} className="rb-card rb-meeting-history-card">
+                <div className="rb-meeting-list-card__icon"><Video size={17} /></div>
+                <div className="rb-meeting-history-card__text">
+                  <div className="rb-meeting-list-card__title">{entry.title}</div>
+                  <div className="rb-meeting-list-card__meta">
+                    {new Date(entry.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {entry.durationMinutes} min
+                  </div>
+                </div>
+                <span className="rb-meeting-history-card__duration">{entry.durationMinutes} min</span>
               </div>
-            </div>
-          ))}
-        </div>
-      ))}
+            ))}
+          </div>
+        ))}
+      </section>
 
       {showJoin && <JoinMeetingModal onClose={() => setShowJoin(false)} />}
       {showSchedule && <ScheduleMeetingModal onClose={() => setShowSchedule(false)} />}
     </div>
   );
 }
-
-const btnRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 7 };

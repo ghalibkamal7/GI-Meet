@@ -114,16 +114,24 @@ export function FileHubPage() {
   });
 
   return (
-    <div className="rb-page">
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>File Hub</h1>
+    <div className="rb-page rb-file-hub">
+      <header className="rb-file-hub__header">
+        <div>
+          <span className="rb-eyebrow">Shared across your conversations</span>
+          <h1>File hub</h1>
+          <p>Find photos, videos, documents and links in one place.</p>
+        </div>
+        <div className="rb-file-hub__mark" aria-hidden="true"><FileText size={23} /></div>
+      </header>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div className="rb-file-hub__tabs" role="group" aria-label="Shared file types">
         {(['photos', 'videos', 'documents', 'links'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={tab === t ? 'rb-btn rb-btn--primary' : 'rb-btn rb-btn--outline'}
-            style={{ fontSize: 13, padding: '6px 14px', textTransform: 'capitalize' }}
+            type="button"
+            aria-pressed={tab === t}
+            className={tab === t ? 'is-active' : ''}
           >
             {t}
           </button>
@@ -131,36 +139,38 @@ export function FileHubPage() {
       </div>
 
       {tab !== 'links' && (
-        <input className="rb-input" placeholder="Search files..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: 16, maxWidth: 320 }} />
+        <label className="rb-file-hub__search">
+          <input aria-label="Search files" className="rb-input" placeholder="Search files..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </label>
       )}
 
       {tab === 'links' ? (
-        <div>
-          {links.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No links shared yet.</p>}
+        <div className="rb-file-hub__list">
+          {links.length === 0 && <p className="rb-file-hub__empty">No links shared yet.</p>}
           {links.map((l) => (
-            <a key={l.id} href={l.url} target="_blank" rel="noreferrer" style={{ display: 'block', padding: '8px 0', borderBottom: '1px solid var(--color-border)', color: 'var(--color-brand-600)', fontSize: 14, wordBreak: 'break-all' }}>
+            <a key={l.id} href={l.url} target="_blank" rel="noreferrer" className="rb-file-hub__link">
               {l.url}
             </a>
           ))}
         </div>
       ) : tab === 'photos' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+        <div className="rb-file-hub__photo-grid">
           {filteredFiles.map((f) => (
-            <a key={f.id} href={f.attachment.url} target="_blank" rel="noreferrer">
-              <img src={f.attachment.url} alt={f.attachment.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 10 }} />
+            <a key={f.id} href={f.attachment.url} target="_blank" rel="noreferrer" aria-label={`Open ${f.attachment.name}`}>
+              <img src={f.attachment.url} alt={f.attachment.name} />
             </a>
           ))}
-          {filteredFiles.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>No photos yet.</p>}
+          {filteredFiles.length === 0 && <p className="rb-file-hub__empty">No photos yet.</p>}
         </div>
       ) : (
-        <div>
-          {filteredFiles.length === 0 && <p style={{ color: 'var(--color-text-muted)' }}>Nothing here yet.</p>}
+        <div className="rb-file-hub__list">
+          {filteredFiles.length === 0 && <p className="rb-file-hub__empty">Nothing here yet.</p>}
           {filteredFiles.map((f) => (
-            <a key={f.id} href={f.attachment.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--color-border)', color: 'inherit', textDecoration: 'none' }}>
-              <span style={{ display: 'flex', color: 'var(--color-brand-600)' }}>{tab === 'videos' ? <Film size={20} strokeWidth={1.75} /> : <FileText size={20} strokeWidth={1.75} />}</span>
-              <div>
-                <div style={{ fontSize: 14 }}>{f.attachment.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{new Date(f.createdAt).toLocaleDateString()}</div>
+            <a key={f.id} href={f.attachment.url} target="_blank" rel="noreferrer" className="rb-file-hub__item">
+              <span className="rb-file-hub__item-icon">{tab === 'videos' ? <Film size={20} strokeWidth={1.75} /> : <FileText size={20} strokeWidth={1.75} />}</span>
+              <div className="rb-file-hub__item-body">
+                <div className="rb-file-hub__item-title">{f.attachment.name}</div>
+                <div className="rb-file-hub__item-meta">{new Date(f.createdAt).toLocaleDateString()}</div>
               </div>
             </a>
           ))}

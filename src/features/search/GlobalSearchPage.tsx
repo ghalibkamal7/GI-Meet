@@ -4,6 +4,7 @@ import { searchUsersByUsername } from '../../services/searchService';
 import { useAuth } from '../../context/AuthContext';
 import type { UserProfile } from '../../utils/types';
 import { getOrCreateDirectChat } from '../chat/chatService';
+import { Search, UserRound } from 'lucide-react';
 
 export function GlobalSearchPage() {
   const { profile } = useAuth();
@@ -35,57 +36,45 @@ export function GlobalSearchPage() {
   }
 
   return (
-    <div className="rb-page rb-page--narrow">
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Search</h1>
-      <input
-        className="rb-input"
-        placeholder="Search people by username..."
-        value={term}
-        onChange={(e) => handleSearch(e.target.value)}
-        autoFocus
-        style={{ marginBottom: 16 }}
-      />
+    <div className="rb-page rb-page--narrow rb-search-page">
+      <header className="rb-search-header">
+        <span className="rb-eyebrow">Find your people</span>
+        <h1>Search</h1>
+        <p>Look up people by their username and start a conversation.</p>
+      </header>
+      <label className="rb-search-field">
+        <Search size={18} aria-hidden="true" />
+        <input
+          type="search"
+          placeholder="Search by username..."
+          value={term}
+          onChange={(e) => handleSearch(e.target.value)}
+          autoFocus
+          aria-label="Search people by username"
+        />
+      </label>
 
-      {loading && <p style={{ color: 'var(--color-text-muted)' }}>Searching…</p>}
+      {loading && <p className="rb-search-state" role="status">Searching…</p>}
       {!loading && term.length >= 2 && users.length === 0 && (
-        <p style={{ color: 'var(--color-text-muted)' }}>No people found. To search inside a specific chat, open it and select “Search in chat” from the chat actions menu.</p>
+        <div className="rb-empty-state rb-search-empty">
+          <div className="rb-empty-state__icon"><UserRound size={20} /></div>
+          <h2>No people found</h2>
+          <p>Try another username. To search inside a chat, open it and choose “Search in chat” from the actions menu.</p>
+        </div>
       )}
 
       {users.map((user) => (
         <button
           key={user.uid}
           onClick={() => handleOpenChat(user)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            width: '100%',
-            padding: '10px 6px',
-            background: 'none',
-            border: 'none',
-            borderBottom: '1px solid var(--color-border)',
-            textAlign: 'left',
-            cursor: 'pointer',
-          }}
+          className="rb-search-result"
         >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'var(--color-brand-100)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 600,
-              color: 'var(--color-brand-600)',
-            }}
-          >
+          <div className="rb-search-result__avatar">
             {user.displayName.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{user.displayName}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>@{user.username}</div>
+          <div className="rb-search-result__body">
+            <div className="rb-search-result__name">{user.displayName}</div>
+            <div className="rb-search-result__username">@{user.username}</div>
           </div>
         </button>
       ))}
