@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="background" x1="42" y1="24" x2="472" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#087b6d"/>
+      <stop offset=".52" stop-color="#07594f"/>
+      <stop offset="1" stop-color="#073b38"/>
+    </linearGradient>
+    <linearGradient id="backBubble" x1="286" y1="91" x2="433" y2="277" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a8f3ce"/>
+      <stop offset="1" stop-color="#39c9a7"/>
+    </linearGradient>
+    <linearGradient id="frontBubble" x1="97" y1="151" x2="365" y2="408" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffdf3"/>
+      <stop offset="1" stop-color="#e8f7ef"/>
+    </linearGradient>
+    <linearGradient id="connection" x1="145" y1="278" x2="378" y2="306" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d88f22"/>
+      <stop offset=".48" stop-color="#17786f"/>
+      <stop offset="1" stop-color="#22a98e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="matrix(216 244 -223 198 139 126)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#40d5a3" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#40d5a3" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path fill="url(#background)" d="M0 0h512v512H0z"/>
+  <path fill="url(#glow)" d="M0 0h512v512H0z"/>
+  <g transform="translate(51.2 51.2) scale(.8)">
+    <path d="M293 105h102c23 0 42 19 42 42v92c0 23-19 42-42 42h-27l-44 35v-35h-31c-23 0-42-19-42-42v-92c0-23 19-42 42-42Z" fill="url(#backBubble)"/>
+    <path d="M116 149h218c27 0 49 22 49 49v143c0 27-22 49-49 49H206l-65 46v-46h-25c-27 0-49-22-49-49V198c0-27 22-49 49-49Z" fill="url(#frontBubble)"/>
+    <path d="M139 276c27-54 66-54 94 0s67 54 94 0 67-54 94 0" fill="none" stroke="url(#connection)" stroke-linecap="round" stroke-width="22"/>
+    <circle cx="139" cy="276" r="15" fill="#eaa63c"/>
+    <circle cx="421" cy="276" r="15" fill="#26b993"/>
+    <circle cx="280" cy="276" r="9" fill="#fffdf3"/>
+  </g>
+</svg>
